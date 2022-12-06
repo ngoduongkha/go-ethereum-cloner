@@ -16,13 +16,8 @@ type State struct {
 	latestBlockHash Hash
 }
 
-func NewStateFromDisk(dataDir string) (*State, error) {
-	err := initDataDirIfNotExists(dataDir)
-	if err != nil {
-		return nil, err
-	}
-
-	gen, err := loadGenesis(getGenesisJsonFilePath(dataDir))
+func NewStateFromDisk() (*State, error) {
+	gen, err := loadGenesis()
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +27,12 @@ func NewStateFromDisk(dataDir string) (*State, error) {
 		balances[account] = balance
 	}
 
-	f, err := os.OpenFile(getBlocksDbFilePath(dataDir), os.O_APPEND|os.O_RDWR, 0600)
+	curWd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+
+	f, err := os.OpenFile(curWd+"/database/block.db", os.O_APPEND|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, err
 	}

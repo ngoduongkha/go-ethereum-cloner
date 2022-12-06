@@ -6,29 +6,21 @@ import (
 	"os"
 )
 
-const flagDataDir = "datadir"
-
 func main() {
-	var tbbCmd = &cobra.Command{
-		Use:   "tbb",
-		Short: "The Blockchain Bar CLI",
+	var gethCmd = &cobra.Command{
+		Use:   "geth",
+		Short: "The go-ethereum CLI",
 		Run: func(cmd *cobra.Command, args []string) {
 		},
 	}
 
-	err := tbbCmd.Execute()
+	gethCmd.AddCommand(balancesCmd())
+	gethCmd.AddCommand(runCmd())
+
+	err := gethCmd.Execute()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
-	}
-}
-
-func addDefaultRequiredFlags(cmd *cobra.Command) {
-	cmd.Flags().String(flagDataDir, "", "Absolute path to the node data dir where the DB will/is stored")
-	err := cmd.MarkFlagRequired(flagDataDir)
-	if err != nil {
-		panic(err)
-		return
 	}
 }
 
