@@ -19,7 +19,7 @@ func main() {
 
 	err := gethCmd.Execute()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }

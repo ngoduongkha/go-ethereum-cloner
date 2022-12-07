@@ -2,6 +2,7 @@ package database
 
 import (
 	"encoding/json"
+	"io/ioutil"
 )
 
 const genesisJson = `
@@ -17,12 +18,21 @@ type genesis struct {
 	Balances map[Account]uint `json:"balances"`
 }
 
-func loadGenesis() (genesis, error) {
+func loadGenesis(path string) (genesis, error) {
+	content, err := ioutil.ReadFile(path)
+	if err != nil {
+		return genesis{}, err
+	}
+
 	var loadedGenesis genesis
-	err := json.Unmarshal([]byte(genesisJson), &loadedGenesis)
+	err = json.Unmarshal(content, &loadedGenesis)
 	if err != nil {
 		return genesis{}, err
 	}
 
 	return loadedGenesis, nil
+}
+
+func writeGenesisToDisk(path string) error {
+	return ioutil.WriteFile(path, []byte(genesisJson), 0644)
 }
