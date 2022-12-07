@@ -28,18 +28,12 @@ func balancesListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "Lists all balances.",
 		Run: func(cmd *cobra.Command, args []string) {
-			state, err := database.NewStateFromDisk()
+			state, err := database.NewStateFromDisk(getDataDirFromCmd(cmd))
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
-			defer func(state *database.State) {
-				err := state.Close()
-				if err != nil {
-					fmt.Fprintln(os.Stderr, err)
-					os.Exit(1)
-				}
-			}(state)
+			defer state.Close()
 
 			fmt.Printf("Accounts balances at %x:\n", state.LatestBlockHash())
 			fmt.Println("__________________")
@@ -49,6 +43,8 @@ func balancesListCmd() *cobra.Command {
 			}
 		},
 	}
+
+	addDefaultRequiredFlags(balancesListCmd)
 
 	return balancesListCmd
 }
