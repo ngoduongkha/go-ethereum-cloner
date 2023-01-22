@@ -3,13 +3,16 @@ package node
 import (
 	"context"
 	"fmt"
-	"github.com/ngoduongkha/go-ethereum-cloner/database"
 	"net/http"
 	"time"
+
+	"github.com/ngoduongkha/go-ethereum-cloner/database"
 )
 
 func (n *Node) sync(ctx context.Context) error {
-	ticker := time.NewTicker(15 * time.Second)
+	n.doSync()
+
+	ticker := time.NewTicker(45 * time.Second)
 
 	for {
 		select {
@@ -24,7 +27,11 @@ func (n *Node) sync(ctx context.Context) error {
 
 func (n *Node) doSync() {
 	for _, peer := range n.knownPeers {
-		if n.ip == peer.IP && n.port == peer.Port {
+		if n.info.IP == peer.IP && n.info.Port == peer.Port {
+			continue
+		}
+
+		if peer.IP == "" {
 			continue
 		}
 
@@ -52,7 +59,13 @@ func (n *Node) doSync() {
 			continue
 		}
 
-		err = n.syncKnownPeers(peer, status)
+		err = n.syncKnownPeers(status)
+		if err != nil {
+			fmt.Printf("ERROR: %s\n", err)
+			continue
+		}
+
+		err = n.syncPendingTXs(peer, status.PendingTXs)
 		if err != nil {
 			fmt.Printf("ERROR: %s\n", err)
 			continue
@@ -90,10 +103,19 @@ func (n *Node) syncBlocks(peer PeerNode, status StatusRes) error {
 		return err
 	}
 
-	return n.state.AddBlocks(blocks)
+	for _, block := range blocks {
+		err = n.addBlock(block)
+		if err != nil {
+			return err
+		}
+
+		n.newSyncedBlocks <- block
+	}
+
+	return nil
 }
 
-func (n *Node) syncKnownPeers(peer PeerNode, status StatusRes) error {
+func (n *Node) syncKnownPeers(status StatusRes) error {
 	for _, statusPeer := range status.KnownPeers {
 		if !n.IsKnownPeer(statusPeer) {
 			fmt.Printf("Found new Peer %s\n", statusPeer.TcpAddress())
@@ -105,22 +127,36 @@ func (n *Node) syncKnownPeers(peer PeerNode, status StatusRes) error {
 	return nil
 }
 
+func (n *Node) syncPendingTXs(peer PeerNode, txs []database.SignedTx) error {
+	for _, tx := range txs {
+		err := n.AddPendingTX(tx, peer)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (n *Node) joinKnownPeers(peer PeerNode) error {
 	if peer.connected {
 		return nil
 	}
 
-	url := fmt.Sprintf(
-		"http://%s%s?%s=%s&%s=%d",
+	p_url := fmt.Sprintf(
+		"%s://%s%s?%s=%s&%s=%d&%s=%s",
+		peer.ApiProtocol(),
 		peer.TcpAddress(),
 		endpointAddPeer,
 		endpointAddPeerQueryKeyIP,
-		n.ip,
+		n.info.IP,
 		endpointAddPeerQueryKeyPort,
-		n.port,
+		n.info.Port,
+		endpointAddPeerQueryKeyMiner,
+		n.info.Account.String(),
 	)
 
-	res, err := http.Get(url)
+	res, err := http.Get(p_url)
 	if err != nil {
 		return err
 	}
@@ -147,7 +183,7 @@ func (n *Node) joinKnownPeers(peer PeerNode) error {
 }
 
 func queryPeerStatus(peer PeerNode) (StatusRes, error) {
-	url := fmt.Sprintf("http://%s%s", peer.TcpAddress(), endpointStatus)
+	url := fmt.Sprintf("%s://%s%s", peer.ApiProtocol(), peer.TcpAddress(), endpointStatus)
 	res, err := http.Get(url)
 	if err != nil {
 		return StatusRes{}, err
@@ -166,7 +202,8 @@ func fetchBlocksFromPeer(peer PeerNode, fromBlock database.Hash) ([]database.Blo
 	fmt.Printf("Importing blocks from Peer %s...\n", peer.TcpAddress())
 
 	url := fmt.Sprintf(
-		"http://%s%s?%s=%s",
+		"%s://%s%s?%s=%s",
+		peer.ApiProtocol(),
 		peer.TcpAddress(),
 		endpointSync,
 		endpointSyncQueryKeyFromBlock,

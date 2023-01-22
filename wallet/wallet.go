@@ -5,14 +5,15 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
+	"os"
+	"path/filepath"
+
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/google/uuid"
 	"github.com/ngoduongkha/go-ethereum-cloner/database"
-	"github.com/pborman/uuid"
-	"io/ioutil"
-	"path/filepath"
 )
 
 const keystoreDirName = "keystore"
@@ -38,7 +39,7 @@ func SignTxWithKeystoreAccount(tx database.Tx, acc common.Address, pwd, keystore
 		return database.SignedTx{}, err
 	}
 
-	ksAccountJson, err := ioutil.ReadFile(ksAccount.URL.Path)
+	ksAccountJson, err := os.ReadFile(ksAccount.URL.Path)
 	if err != nil {
 		return database.SignedTx{}, err
 	}
@@ -93,7 +94,11 @@ func NewRandomKey() (*keystore.Key, error) {
 		return nil, err
 	}
 
-	id := uuid.NewRandom()
+	id, err := uuid.NewRandom()
+	if err != nil {
+		return nil, err
+	}
+
 	key := &keystore.Key{
 		Id:         id,
 		Address:    crypto.PubkeyToAddress(privateKeyECDSA.PublicKey),

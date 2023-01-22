@@ -2,27 +2,35 @@ package main
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/ngoduongkha/go-ethereum-cloner/fs"
 	"github.com/spf13/cobra"
-	"os"
 )
 
-const flagDataDir = "datadir"
-const flagIP = "ip"
-const flagPort = "port"
+const (
+	flagKeystoreFile  = "keystore"
+	flagDataDir       = "datadir"
+	flagMiner         = "miner"
+	flagSSLEmail      = "ssl-email"
+	flagDisableSSL    = "disable-ssl"
+	flagIP            = "ip"
+	flagPort          = "port"
+	flagBootstrapAcc  = "bootstrap-account"
+	flagBootstrapIp   = "bootstrap-ip"
+	flagBootstrapPort = "bootstrap-port"
+)
 
 func main() {
-	var tbbCmd = &cobra.Command{
-		Use:   "tbb",
-		Short: "The Blockchain Bar CLI",
-		Run: func(cmd *cobra.Command, args []string) {
-		},
+	gethCmd := &cobra.Command{
+		Use:   "geth",
+		Short: "Go Ethereum CLI",
 	}
 
-	tbbCmd.AddCommand(runCmd())
-	tbbCmd.AddCommand(balancesCmd())
+	gethCmd.AddCommand(walletCmd())
+	gethCmd.AddCommand(runCmd())
 
-	err := tbbCmd.Execute()
+	err := gethCmd.Execute()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -30,8 +38,13 @@ func main() {
 }
 
 func addDefaultRequiredFlags(cmd *cobra.Command) {
-	cmd.Flags().String(flagDataDir, "", "Absolute path to the node data dir where the DB will/is stored")
+	cmd.Flags().String(flagDataDir, "", "Absolute path to your node's data dir where the DB will be/is stored")
 	cmd.MarkFlagRequired(flagDataDir)
+}
+
+func addKeystoreFlag(cmd *cobra.Command) {
+	cmd.Flags().String(flagKeystoreFile, "", "Absolute path to the encrypted keystore file")
+	cmd.MarkFlagRequired(flagKeystoreFile)
 }
 
 func getDataDirFromCmd(cmd *cobra.Command) string {

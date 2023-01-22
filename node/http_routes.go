@@ -1,11 +1,15 @@
 package node
 
 import (
+	"errors"
 	"fmt"
-	"github.com/ngoduongkha/go-ethereum-cloner/database"
 	"net/http"
 	"strconv"
-	"time"
+	"strings"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ngoduongkha/go-ethereum-cloner/database"
+	"github.com/ngoduongkha/go-ethereum-cloner/wallet"
 )
 
 type ErrRes struct {
@@ -13,25 +17,30 @@ type ErrRes struct {
 }
 
 type BalancesRes struct {
-	Hash     database.Hash             `json:"block_hash"`
-	Balances map[database.Account]uint `json:"balances"`
+	Hash     database.Hash           `json:"block_hash"`
+	Balances map[common.Address]uint `json:"balances"`
 }
 
 type TxAddReq struct {
-	From  string `json:"from"`
-	To    string `json:"to"`
-	Value uint   `json:"value"`
-	Data  string `json:"data"`
+	From     string `json:"from"`
+	FromPwd  string `json:"from_pwd"`
+	To       string `json:"to"`
+	Gas      uint   `json:"gas"`
+	GasPrice uint   `json:"gasPrice"`
+	Value    uint   `json:"value"`
+	Data     string `json:"data"`
 }
 
 type TxAddRes struct {
-	Hash database.Hash `json:"block_hash"`
+	Success bool `json:"success"`
 }
 
 type StatusRes struct {
 	Hash       database.Hash       `json:"block_hash"`
 	Number     uint64              `json:"block_number"`
 	KnownPeers map[string]PeerNode `json:"peers_known"`
+	PendingTXs []database.SignedTx `json:"pending_txs"`
+	Account    common.Address      `json:"account"`
 }
 
 type SyncRes struct {
@@ -44,10 +53,12 @@ type AddPeerRes struct {
 }
 
 func listBalancesHandler(w http.ResponseWriter, r *http.Request, state *database.State) {
+	enableCors(&w)
+
 	writeRes(w, BalancesRes{state.LatestBlockHash(), state.Balances})
 }
 
-func txAddHandler(w http.ResponseWriter, r *http.Request, state *database.State) {
+func txAddHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 	req := TxAddReq{}
 	err := readReq(r, &req)
 	if err != nil {
@@ -55,29 +66,45 @@ func txAddHandler(w http.ResponseWriter, r *http.Request, state *database.State)
 		return
 	}
 
-	tx := database.NewTx(database.NewAccount(req.From), database.NewAccount(req.To), req.Value, req.Data)
+	from := database.NewAccount(req.From)
 
-	block := database.NewBlock(
-		state.LatestBlockHash(),
-		state.NextBlockNumber(),
-		uint64(time.Now().Unix()),
-		[]database.Tx{tx},
-	)
+	if from.String() == common.HexToAddress("").String() {
+		writeErrRes(w, fmt.Errorf("%s is an invalid 'from' sender", from.String()))
+		return
+	}
 
-	hash, err := state.AddBlock(block)
+	if req.FromPwd == "" {
+		writeErrRes(w, fmt.Errorf("password to decrypt the %s account is required. 'from_pwd' is empty", from.String()))
+		return
+	}
+
+	nonce := node.state.GetNextAccountNonce(from)
+	tx := database.NewTx(from, database.NewAccount(req.To), req.Gas, req.GasPrice, req.Value, nonce, req.Data)
+
+	signedTx, err := wallet.SignTxWithKeystoreAccount(tx, from, req.FromPwd, wallet.GetKeystoreDirPath(node.dataDir))
 	if err != nil {
 		writeErrRes(w, err)
 		return
 	}
 
-	writeRes(w, TxAddRes{hash})
+	err = node.AddPendingTX(signedTx, node.info)
+	if err != nil {
+		writeErrRes(w, err)
+		return
+	}
+
+	writeRes(w, TxAddRes{Success: true})
 }
 
 func statusHandler(w http.ResponseWriter, r *http.Request, node *Node) {
+	enableCors(&w)
+
 	res := StatusRes{
 		Hash:       node.state.LatestBlockHash(),
 		Number:     node.state.LatestBlock().Header.Number,
 		KnownPeers: node.knownPeers,
+		PendingTXs: node.getPendingTXsAsArray(),
+		Account:    database.NewAccount(node.info.Account.String()),
 	}
 
 	writeRes(w, res)
@@ -105,6 +132,7 @@ func syncHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 func addPeerHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 	peerIP := r.URL.Query().Get(endpointAddPeerQueryKeyIP)
 	peerPortRaw := r.URL.Query().Get(endpointAddPeerQueryKeyPort)
+	minerRaw := r.URL.Query().Get(endpointAddPeerQueryKeyMiner)
 
 	peerPort, err := strconv.ParseUint(peerPortRaw, 10, 32)
 	if err != nil {
@@ -112,11 +140,48 @@ func addPeerHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 		return
 	}
 
-	peer := NewPeerNode(peerIP, peerPort, false, true)
+	peer := NewPeerNode(peerIP, peerPort, false, database.NewAccount(minerRaw), true)
 
 	node.AddPeer(peer)
 
 	fmt.Printf("Peer '%s' was added into KnownPeers\n", peer.TcpAddress())
 
 	writeRes(w, AddPeerRes{true, ""})
+}
+
+func blockByNumberOrHash(w http.ResponseWriter, r *http.Request, node *Node) {
+	enableCors(&w)
+
+	errorParamsRequired := errors.New("height or hash param is required")
+
+	params := strings.Split(r.URL.Path, "/")[1:]
+	if len(params) < 2 {
+		writeErrRes(w, errorParamsRequired)
+		return
+	}
+
+	p := strings.TrimSpace(params[1])
+	if len(p) == 0 {
+		writeErrRes(w, errorParamsRequired)
+		return
+	}
+	hsh := ""
+	height, err := strconv.ParseUint(p, 10, 64)
+	if err != nil {
+		hsh = p
+	}
+
+	block, err := database.GetBlockByHeightOrHash(node.state, height, hsh, node.dataDir)
+	if err != nil {
+		writeErrRes(w, err)
+		return
+	}
+
+	writeRes(w, block)
+}
+
+func mempoolViewer(w http.ResponseWriter, r *http.Request, txs map[string]database.SignedTx) {
+	enableCors(&w)
+
+	writeRes(w, txs)
 }

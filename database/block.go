@@ -1,14 +1,16 @@
 package database
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
-import (
-	"bytes"
-)
+const BlockReward = 100
 
 type Hash [32]byte
 
@@ -33,13 +35,15 @@ func (h Hash) IsEmpty() bool {
 
 type Block struct {
 	Header BlockHeader `json:"header"`
-	TXs    []Tx        `json:"payload"`
+	TXs    []SignedTx  `json:"payload"`
 }
 
 type BlockHeader struct {
-	Parent Hash   `json:"parent"`
-	Number uint64 `json:"number"`
-	Time   uint64 `json:"time"`
+	Parent Hash           `json:"parent"`
+	Number uint64         `json:"number"`
+	Nonce  uint32         `json:"nonce"`
+	Time   uint64         `json:"time"`
+	Miner  common.Address `json:"miner"`
 }
 
 type BlockFS struct {
@@ -47,8 +51,8 @@ type BlockFS struct {
 	Value Block `json:"block"`
 }
 
-func NewBlock(parent Hash, number uint64, time uint64, txs []Tx) Block {
-	return Block{BlockHeader{parent, number, time}, txs}
+func NewBlock(parent Hash, number uint64, nonce uint32, time uint64, miner common.Address, txs []SignedTx) Block {
+	return Block{BlockHeader{parent, number, nonce, time, miner}, txs}
 }
 
 func (b Block) Hash() (Hash, error) {
@@ -58,4 +62,30 @@ func (b Block) Hash() (Hash, error) {
 	}
 
 	return sha256.Sum256(blockJson), nil
+}
+
+func (b Block) GasReward() uint {
+	reward := uint(0)
+
+	for _, tx := range b.TXs {
+		reward += tx.GasCost()
+	}
+
+	return reward
+}
+
+func IsBlockHashValid(hash Hash, miningDifficulty uint) bool {
+	zeroesCount := uint(0)
+
+	for i := uint(0); i < miningDifficulty; i++ {
+		if fmt.Sprintf("%x", hash[i]) == "0" {
+			zeroesCount++
+		}
+	}
+
+	if fmt.Sprintf("%x", hash[miningDifficulty]) == "0" {
+		return false
+	}
+
+	return zeroesCount == miningDifficulty
 }

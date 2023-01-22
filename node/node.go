@@ -2,26 +2,54 @@ package node
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"github.com/ngoduongkha/go-ethereum-cloner/database"
 	"net/http"
+	"time"
+
+	"github.com/caddyserver/certmagic"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ngoduongkha/go-ethereum-cloner/database"
 )
 
-const DefaultIP = "127.0.0.1"
-const DefaultHTTPort = 8080
-const endpointStatus = "/node/status"
+const DefaultBootstrapIp = "node.tbb.web3.coach"
 
-const endpointSync = "/node/sync"
-const endpointSyncQueryKeyFromBlock = "fromBlock"
+// The Web3Coach's Genesis account with 1M ETH tokens
+const (
+	DefaultBootstrapAcc = "0x09ee50f2f37fcba1845de6fe5c762e83e65e755c"
+	DefaultMiner        = "0x0000000000000000000000000000000000000000"
+	DefaultIP           = "127.0.0.1"
+	HttpSSLPort         = 443
+	endpointStatus      = "/node/status"
+)
 
-const endpointAddPeer = "/node/peer"
-const endpointAddPeerQueryKeyIP = "ip"
-const endpointAddPeerQueryKeyPort = "port"
+const (
+	endpointSync                  = "/node/sync"
+	endpointSyncQueryKeyFromBlock = "fromBlock"
+)
+
+const (
+	endpointAddPeer              = "/node/peer"
+	endpointAddPeerQueryKeyIP    = "ip"
+	endpointAddPeerQueryKeyPort  = "port"
+	endpointAddPeerQueryKeyMiner = "miner"
+)
+
+const (
+	endpointBlockByNumberOrHash = "/block/"
+	endpointMempoolViewer       = "/mempool/"
+)
+
+const (
+	miningIntervalSeconds   = 10
+	DefaultMiningDifficulty = 3
+)
 
 type PeerNode struct {
-	IP          string `json:"ip"`
-	Port        uint64 `json:"port"`
-	IsBootstrap bool   `json:"is_bootstrap"`
+	IP          string         `json:"ip"`
+	Port        uint64         `json:"port"`
+	IsBootstrap bool           `json:"is_bootstrap"`
+	Account     common.Address `json:"account"`
 
 	// Whenever my node already established connection, sync with this Peer
 	connected bool
@@ -31,37 +59,63 @@ func (pn PeerNode) TcpAddress() string {
 	return fmt.Sprintf("%s:%d", pn.IP, pn.Port)
 }
 
+func (pn PeerNode) ApiProtocol() string {
+	if pn.Port == HttpSSLPort {
+		return "https"
+	}
+
+	return "http"
+}
+
 type Node struct {
 	dataDir string
-	ip      string
-	port    uint64
+	info    PeerNode
 
+	// The main blockchain state after all TXs from mined blocks were applied
 	state *database.State
 
-	knownPeers map[string]PeerNode
+	// temporary pending state validating new incoming TXs but reset after the block is mined
+	pendingState *database.State
+
+	knownPeers      map[string]PeerNode
+	pendingTXs      map[string]database.SignedTx
+	archivedTXs     map[string]database.SignedTx
+	newSyncedBlocks chan database.Block
+	newPendingTXs   chan database.SignedTx
+
+	// Number of zeroes the hash must start with to be considered valid. Default 3
+	miningDifficulty uint
+	isMining         bool
 }
 
-func New(dataDir string, ip string, port uint64, bootstrap PeerNode) *Node {
+func New(dataDir string, ip string, port uint64, acc common.Address, bootstrap PeerNode, miningDifficulty uint) *Node {
 	knownPeers := make(map[string]PeerNode)
-	knownPeers[bootstrap.TcpAddress()] = bootstrap
 
-	return &Node{
-		dataDir:    dataDir,
-		ip:         ip,
-		port:       port,
-		knownPeers: knownPeers,
+	n := &Node{
+		dataDir:          dataDir,
+		info:             NewPeerNode(ip, port, false, acc, true),
+		knownPeers:       knownPeers,
+		pendingTXs:       make(map[string]database.SignedTx),
+		archivedTXs:      make(map[string]database.SignedTx),
+		newSyncedBlocks:  make(chan database.Block),
+		newPendingTXs:    make(chan database.SignedTx, 10000),
+		isMining:         false,
+		miningDifficulty: miningDifficulty,
 	}
+
+	n.AddPeer(bootstrap)
+
+	return n
 }
 
-func NewPeerNode(ip string, port uint64, isBootstrap bool, connected bool) PeerNode {
-	return PeerNode{ip, port, isBootstrap, connected}
+func NewPeerNode(ip string, port uint64, isBootstrap bool, acc common.Address, connected bool) PeerNode {
+	return PeerNode{ip, port, isBootstrap, acc, connected}
 }
 
-func (n *Node) Run() error {
-	ctx := context.Background()
-	fmt.Println(fmt.Sprintf("Listening on: %s:%d", n.ip, n.port))
+func (n *Node) Run(ctx context.Context, isSSLDisabled bool, sslEmail string) error {
+	fmt.Printf("Listening on: %s:%d\n", n.info.IP, n.info.Port)
 
-	state, err := database.NewStateFromDisk(n.dataDir)
+	state, err := database.NewStateFromDisk(n.dataDir, n.miningDifficulty)
 	if err != nil {
 		return err
 	}
@@ -69,29 +123,157 @@ func (n *Node) Run() error {
 
 	n.state = state
 
+	pendingState := state.Copy()
+	n.pendingState = &pendingState
+
+	fmt.Println("Blockchain state:")
+	fmt.Printf("	- height: %d\n", n.state.LatestBlock().Header.Number)
+	fmt.Printf("	- hash: %s\n", n.state.LatestBlockHash().Hex())
+
 	go n.sync(ctx)
+	go n.mine(ctx)
 
-	http.HandleFunc("/balances/list", func(w http.ResponseWriter, r *http.Request) {
-		listBalancesHandler(w, r, state)
+	return n.serveHttp(ctx, isSSLDisabled, sslEmail)
+}
+
+func (n *Node) LatestBlockHash() database.Hash {
+	return n.state.LatestBlockHash()
+}
+
+func (n *Node) serveHttp(ctx context.Context, isSSLDisabled bool, sslEmail string) error {
+	handler := http.NewServeMux()
+
+	handler.HandleFunc("/balances/list", func(w http.ResponseWriter, r *http.Request) {
+		listBalancesHandler(w, r, n.state)
 	})
 
-	http.HandleFunc("/tx/add", func(w http.ResponseWriter, r *http.Request) {
-		txAddHandler(w, r, state)
+	handler.HandleFunc("/tx/add", func(w http.ResponseWriter, r *http.Request) {
+		txAddHandler(w, r, n)
 	})
 
-	http.HandleFunc(endpointStatus, func(w http.ResponseWriter, r *http.Request) {
+	handler.HandleFunc(endpointStatus, func(w http.ResponseWriter, r *http.Request) {
 		statusHandler(w, r, n)
 	})
 
-	http.HandleFunc(endpointSync, func(w http.ResponseWriter, r *http.Request) {
+	handler.HandleFunc(endpointSync, func(w http.ResponseWriter, r *http.Request) {
 		syncHandler(w, r, n)
 	})
 
-	http.HandleFunc(endpointAddPeer, func(w http.ResponseWriter, r *http.Request) {
+	handler.HandleFunc(endpointAddPeer, func(w http.ResponseWriter, r *http.Request) {
 		addPeerHandler(w, r, n)
 	})
 
-	return http.ListenAndServe(fmt.Sprintf(":%d", n.port), nil)
+	handler.HandleFunc(endpointBlockByNumberOrHash, func(w http.ResponseWriter, r *http.Request) {
+		blockByNumberOrHash(w, r, n)
+	})
+
+	handler.HandleFunc(endpointMempoolViewer, func(w http.ResponseWriter, r *http.Request) {
+		mempoolViewer(w, r, n.pendingTXs)
+	})
+
+	if isSSLDisabled {
+		server := &http.Server{Addr: fmt.Sprintf(":%d", n.info.Port), Handler: handler}
+
+		go func() {
+			<-ctx.Done()
+			_ = server.Close()
+		}()
+
+		err := server.ListenAndServe()
+		// This shouldn't be an error!
+		if err != http.ErrServerClosed {
+			return err
+		}
+
+		return nil
+	} else {
+		certmagic.DefaultACME.Email = sslEmail
+
+		return certmagic.HTTPS([]string{n.info.IP}, handler)
+	}
+}
+
+func (n *Node) mine(ctx context.Context) error {
+	var miningCtx context.Context
+	var stopCurrentMining context.CancelFunc
+
+	ticker := time.NewTicker(time.Second * miningIntervalSeconds)
+
+	for {
+		select {
+		case <-ticker.C:
+			go func() {
+				if len(n.pendingTXs) > 0 && !n.isMining {
+					n.isMining = true
+
+					miningCtx, stopCurrentMining = context.WithCancel(ctx)
+					err := n.minePendingTXs(miningCtx)
+					if err != nil {
+						fmt.Printf("ERROR: %s\n", err)
+					}
+
+					n.isMining = false
+				}
+			}()
+
+		case block := <-n.newSyncedBlocks:
+			if n.isMining {
+				blockHash, _ := block.Hash()
+				fmt.Printf("\nPeer mined next Block '%s' faster :(\n", blockHash.Hex())
+
+				n.removeMinedPendingTXs(block)
+				stopCurrentMining()
+			}
+
+		case <-ctx.Done():
+			ticker.Stop()
+			return nil
+		}
+	}
+}
+
+func (n *Node) minePendingTXs(ctx context.Context) error {
+	blockToMine := NewPendingBlock(
+		n.state.LatestBlockHash(),
+		n.state.NextBlockNumber(),
+		n.info.Account,
+		n.getPendingTXsAsArray(),
+	)
+
+	minedBlock, err := Mine(ctx, blockToMine, n.miningDifficulty)
+	if err != nil {
+		return err
+	}
+
+	n.removeMinedPendingTXs(minedBlock)
+
+	err = n.addBlock(minedBlock)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (n *Node) removeMinedPendingTXs(block database.Block) {
+	if len(block.TXs) > 0 && len(n.pendingTXs) > 0 {
+		fmt.Println("Updating in-memory Pending TXs Pool:")
+	}
+
+	for _, tx := range block.TXs {
+		txHash, _ := tx.Hash()
+		if _, exists := n.pendingTXs[txHash.Hex()]; exists {
+			fmt.Printf("\t-archiving mined TX: %s\n", txHash.Hex())
+
+			n.archivedTXs[txHash.Hex()] = tx
+			delete(n.pendingTXs, txHash.Hex())
+		}
+	}
+}
+
+func (n *Node) ChangeMiningDifficulty(newDifficulty uint) {
+	n.miningDifficulty = newDifficulty
+	n.state.ChangeMiningDifficulty(newDifficulty)
 }
 
 func (n *Node) AddPeer(peer PeerNode) {
@@ -103,11 +285,72 @@ func (n *Node) RemovePeer(peer PeerNode) {
 }
 
 func (n *Node) IsKnownPeer(peer PeerNode) bool {
-	if peer.IP == n.ip && peer.Port == n.port {
+	if peer.IP == n.info.IP && peer.Port == n.info.Port {
 		return true
 	}
 
 	_, isKnownPeer := n.knownPeers[peer.TcpAddress()]
 
 	return isKnownPeer
+}
+
+func (n *Node) AddPendingTX(tx database.SignedTx, fromPeer PeerNode) error {
+	txHash, err := tx.Hash()
+	if err != nil {
+		return err
+	}
+
+	txJson, err := json.Marshal(tx)
+	if err != nil {
+		return err
+	}
+
+	err = n.validateTxBeforeAddingToMempool(tx)
+	if err != nil {
+		return err
+	}
+
+	_, isAlreadyPending := n.pendingTXs[txHash.Hex()]
+	_, isArchived := n.archivedTXs[txHash.Hex()]
+
+	if !isAlreadyPending && !isArchived {
+		fmt.Printf("Added Pending TX %s from Peer %s\n", txJson, fromPeer.TcpAddress())
+		n.pendingTXs[txHash.Hex()] = tx
+		n.newPendingTXs <- tx
+	}
+
+	return nil
+}
+
+// addBlock is a wrapper around the n.state.AddBlock() to have a single function for changing the main state
+// from the Node perspective, so we can also reset the pending state in the same time.
+func (n *Node) addBlock(block database.Block) error {
+	_, err := n.state.AddBlock(block)
+	if err != nil {
+		return err
+	}
+
+	// Reset the pending state
+	pendingState := n.state.Copy()
+	n.pendingState = &pendingState
+
+	return nil
+}
+
+// validateTxBeforeAddingToMempool ensures the TX is authentic, with correct nonce, and the sender has sufficient
+// funds so we waste PoW resources on TX we can tell in advance are wrong.
+func (n *Node) validateTxBeforeAddingToMempool(tx database.SignedTx) error {
+	return database.ApplyTx(tx, n.pendingState)
+}
+
+func (n *Node) getPendingTXsAsArray() []database.SignedTx {
+	txs := make([]database.SignedTx, len(n.pendingTXs))
+
+	i := 0
+	for _, tx := range n.pendingTXs {
+		txs[i] = tx
+		i++
+	}
+
+	return txs
 }
