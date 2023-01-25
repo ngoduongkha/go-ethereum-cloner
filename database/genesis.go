@@ -12,16 +12,13 @@ var genesisJson = `{
 	"chain_id": "Ethereum",
 	"symbol": "ETH",
 	"balances": {
-	  "0x09eE50f2F37FcBA1845dE6FE5C762E83E65E755c": 1000000
-	},
-	"fork_tip_1": 35
+	  "0xA4848e9A6f18bAF8aE79bfE709Cd7e7b1a612939": 1000000
+	}
   }`
 
 type Genesis struct {
 	Balances map[common.Address]uint `json:"balances"`
 	Symbol   string                  `json:"symbol"`
-
-	ForkTIP1 uint64 `json:"fork_tip_1"`
 }
 
 func loadGenesis(path string) (Genesis, error) {

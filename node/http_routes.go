@@ -12,30 +12,28 @@ import (
 	"github.com/ngoduongkha/go-ethereum-cloner/wallet"
 )
 
-type ErrRes struct {
+type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
-type BalancesRes struct {
+type BalancesResponse struct {
 	Hash     database.Hash           `json:"block_hash"`
 	Balances map[common.Address]uint `json:"balances"`
 }
 
-type TxAddReq struct {
-	From     string `json:"from"`
-	FromPwd  string `json:"from_pwd"`
-	To       string `json:"to"`
-	Gas      uint   `json:"gas"`
-	GasPrice uint   `json:"gasPrice"`
-	Value    uint   `json:"value"`
-	Data     string `json:"data"`
+type AddTxRequest struct {
+	From    string `json:"from"`
+	FromPwd string `json:"from_pwd"`
+	To      string `json:"to"`
+	Value   uint   `json:"value"`
+	Data    string `json:"data"`
 }
 
-type TxAddRes struct {
+type AddTxResponse struct {
 	Success bool `json:"success"`
 }
 
-type StatusRes struct {
+type StatusResponse struct {
 	Hash       database.Hash       `json:"block_hash"`
 	Number     uint64              `json:"block_number"`
 	KnownPeers map[string]PeerNode `json:"peers_known"`
@@ -43,63 +41,63 @@ type StatusRes struct {
 	Account    common.Address      `json:"account"`
 }
 
-type SyncRes struct {
+type SyncResponse struct {
 	Blocks []database.Block `json:"blocks"`
 }
 
-type AddPeerRes struct {
+type AddPeerResponse struct {
 	Success bool   `json:"success"`
 	Error   string `json:"error"`
 }
 
-func listBalancesHandler(w http.ResponseWriter, r *http.Request, state *database.State) {
+func listBalancesHandler(w http.ResponseWriter, state *database.State) {
 	enableCors(&w)
 
-	writeRes(w, BalancesRes{state.LatestBlockHash(), state.Balances})
+	writeResponse(w, BalancesResponse{state.LatestBlockHash(), state.Balances})
 }
 
-func txAddHandler(w http.ResponseWriter, r *http.Request, node *Node) {
-	req := TxAddReq{}
-	err := readReq(r, &req)
+func addTxHandler(w http.ResponseWriter, r *http.Request, node *Node) {
+	req := AddTxRequest{}
+	err := readRequest(r, &req)
 	if err != nil {
-		writeErrRes(w, err)
+		writeErrorResponse(w, err)
 		return
 	}
 
 	from := database.NewAccount(req.From)
 
 	if from.String() == common.HexToAddress("").String() {
-		writeErrRes(w, fmt.Errorf("%s is an invalid 'from' sender", from.String()))
+		writeErrorResponse(w, fmt.Errorf("%s is an invalid 'from' sender", from.String()))
 		return
 	}
 
 	if req.FromPwd == "" {
-		writeErrRes(w, fmt.Errorf("password to decrypt the %s account is required. 'from_pwd' is empty", from.String()))
+		writeErrorResponse(w, fmt.Errorf("password to decrypt the %s account is required. 'from_pwd' is empty", from.String()))
 		return
 	}
 
 	nonce := node.state.GetNextAccountNonce(from)
-	tx := database.NewTx(from, database.NewAccount(req.To), req.Gas, req.GasPrice, req.Value, nonce, req.Data)
+	tx := database.NewTx(from, database.NewAccount(req.To), req.Value, nonce, req.Data)
 
 	signedTx, err := wallet.SignTxWithKeystoreAccount(tx, from, req.FromPwd, wallet.GetKeystoreDirPath(node.dataDir))
 	if err != nil {
-		writeErrRes(w, err)
+		writeErrorResponse(w, err)
 		return
 	}
 
 	err = node.AddPendingTX(signedTx, node.info)
 	if err != nil {
-		writeErrRes(w, err)
+		writeErrorResponse(w, err)
 		return
 	}
 
-	writeRes(w, TxAddRes{Success: true})
+	writeResponse(w, AddTxResponse{Success: true})
 }
 
-func statusHandler(w http.ResponseWriter, r *http.Request, node *Node) {
+func statusHandler(w http.ResponseWriter, node *Node) {
 	enableCors(&w)
 
-	res := StatusRes{
+	res := StatusResponse{
 		Hash:       node.state.LatestBlockHash(),
 		Number:     node.state.LatestBlock().Header.Number,
 		KnownPeers: node.knownPeers,
@@ -107,7 +105,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 		Account:    database.NewAccount(node.info.Account.String()),
 	}
 
-	writeRes(w, res)
+	writeResponse(w, res)
 }
 
 func syncHandler(w http.ResponseWriter, r *http.Request, node *Node) {
@@ -116,17 +114,17 @@ func syncHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 	hash := database.Hash{}
 	err := hash.UnmarshalText([]byte(reqHash))
 	if err != nil {
-		writeErrRes(w, err)
+		writeErrorResponse(w, err)
 		return
 	}
 
 	blocks, err := database.GetBlocksAfter(hash, node.dataDir)
 	if err != nil {
-		writeErrRes(w, err)
+		writeErrorResponse(w, err)
 		return
 	}
 
-	writeRes(w, SyncRes{Blocks: blocks})
+	writeResponse(w, SyncResponse{Blocks: blocks})
 }
 
 func addPeerHandler(w http.ResponseWriter, r *http.Request, node *Node) {
@@ -136,7 +134,7 @@ func addPeerHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 
 	peerPort, err := strconv.ParseUint(peerPortRaw, 10, 32)
 	if err != nil {
-		writeRes(w, AddPeerRes{false, err.Error()})
+		writeResponse(w, AddPeerResponse{false, err.Error()})
 		return
 	}
 
@@ -146,7 +144,7 @@ func addPeerHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 
 	fmt.Printf("Peer '%s' was added into KnownPeers\n", peer.TcpAddress())
 
-	writeRes(w, AddPeerRes{true, ""})
+	writeResponse(w, AddPeerResponse{true, ""})
 }
 
 func blockByNumberOrHash(w http.ResponseWriter, r *http.Request, node *Node) {
@@ -156,13 +154,13 @@ func blockByNumberOrHash(w http.ResponseWriter, r *http.Request, node *Node) {
 
 	params := strings.Split(r.URL.Path, "/")[1:]
 	if len(params) < 2 {
-		writeErrRes(w, errorParamsRequired)
+		writeErrorResponse(w, errorParamsRequired)
 		return
 	}
 
 	p := strings.TrimSpace(params[1])
 	if len(p) == 0 {
-		writeErrRes(w, errorParamsRequired)
+		writeErrorResponse(w, errorParamsRequired)
 		return
 	}
 	hsh := ""
@@ -173,15 +171,15 @@ func blockByNumberOrHash(w http.ResponseWriter, r *http.Request, node *Node) {
 
 	block, err := database.GetBlockByHeightOrHash(node.state, height, hsh, node.dataDir)
 	if err != nil {
-		writeErrRes(w, err)
+		writeErrorResponse(w, err)
 		return
 	}
 
-	writeRes(w, block)
+	writeResponse(w, block)
 }
 
-func mempoolViewer(w http.ResponseWriter, r *http.Request, txs map[string]database.SignedTx) {
+func mempoolViewer(w http.ResponseWriter, txs map[string]database.SignedTx) {
 	enableCors(&w)
 
-	writeRes(w, txs)
+	writeResponse(w, txs)
 }

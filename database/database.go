@@ -67,7 +67,12 @@ func GetBlockByHeightOrHash(state *State, height uint64, hash, dataDir string) (
 	if err != nil {
 		return block, err
 	}
-	defer f.Close()
+	defer func(f *os.File) {
+		err := f.Close()
+		if err != nil {
+			panic(err)
+		}
+	}(f)
 
 	_, err = f.Seek(key, 0)
 	if err != nil {

@@ -7,21 +7,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/caddyserver/certmagic"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ngoduongkha/go-ethereum-cloner/database"
 )
 
-const DefaultBootstrapIp = "node.tbb.web3.coach"
+const DefaultIP = "127.0.0.1"
 
-// The Web3Coach's Genesis account with 1M ETH tokens
-const (
-	DefaultBootstrapAcc = "0x09ee50f2f37fcba1845de6fe5c762e83e65e755c"
-	DefaultMiner        = "0x0000000000000000000000000000000000000000"
-	DefaultIP           = "127.0.0.1"
-	HttpSSLPort         = 443
-	endpointStatus      = "/node/status"
-)
+const endpointStatus = "/node/status"
 
 const (
 	endpointSync                  = "/node/sync"
@@ -60,10 +52,6 @@ func (pn PeerNode) TcpAddress() string {
 }
 
 func (pn PeerNode) ApiProtocol() string {
-	if pn.Port == HttpSSLPort {
-		return "https"
-	}
-
 	return "http"
 }
 
@@ -112,14 +100,19 @@ func NewPeerNode(ip string, port uint64, isBootstrap bool, acc common.Address, c
 	return PeerNode{ip, port, isBootstrap, acc, connected}
 }
 
-func (n *Node) Run(ctx context.Context, isSSLDisabled bool, sslEmail string) error {
+func (n *Node) Run(ctx context.Context) error {
 	fmt.Printf("Listening on: %s:%d\n", n.info.IP, n.info.Port)
 
 	state, err := database.NewStateFromDisk(n.dataDir, n.miningDifficulty)
 	if err != nil {
 		return err
 	}
-	defer state.Close()
+	defer func(state *database.State) {
+		err := state.Close()
+		if err != nil {
+			fmt.Println("Error closing state:", err)
+		}
+	}(state)
 
 	n.state = state
 
@@ -130,29 +123,39 @@ func (n *Node) Run(ctx context.Context, isSSLDisabled bool, sslEmail string) err
 	fmt.Printf("	- height: %d\n", n.state.LatestBlock().Header.Number)
 	fmt.Printf("	- hash: %s\n", n.state.LatestBlockHash().Hex())
 
-	go n.sync(ctx)
-	go n.mine(ctx)
+	go func() {
+		err := n.sync(ctx)
+		if err != nil {
+			fmt.Println("Error syncing:", err)
+		}
+	}()
+	go func() {
+		err := n.mine(ctx)
+		if err != nil {
+			fmt.Println("Error mining:", err)
+		}
+	}()
 
-	return n.serveHttp(ctx, isSSLDisabled, sslEmail)
+	return n.serveHttp(ctx)
 }
 
 func (n *Node) LatestBlockHash() database.Hash {
 	return n.state.LatestBlockHash()
 }
 
-func (n *Node) serveHttp(ctx context.Context, isSSLDisabled bool, sslEmail string) error {
+func (n *Node) serveHttp(ctx context.Context) error {
 	handler := http.NewServeMux()
 
 	handler.HandleFunc("/balances/list", func(w http.ResponseWriter, r *http.Request) {
-		listBalancesHandler(w, r, n.state)
+		listBalancesHandler(w, n.state)
 	})
 
 	handler.HandleFunc("/tx/add", func(w http.ResponseWriter, r *http.Request) {
-		txAddHandler(w, r, n)
+		addTxHandler(w, r, n)
 	})
 
 	handler.HandleFunc(endpointStatus, func(w http.ResponseWriter, r *http.Request) {
-		statusHandler(w, r, n)
+		statusHandler(w, n)
 	})
 
 	handler.HandleFunc(endpointSync, func(w http.ResponseWriter, r *http.Request) {
@@ -168,29 +171,23 @@ func (n *Node) serveHttp(ctx context.Context, isSSLDisabled bool, sslEmail strin
 	})
 
 	handler.HandleFunc(endpointMempoolViewer, func(w http.ResponseWriter, r *http.Request) {
-		mempoolViewer(w, r, n.pendingTXs)
+		mempoolViewer(w, n.pendingTXs)
 	})
 
-	if isSSLDisabled {
-		server := &http.Server{Addr: fmt.Sprintf(":%d", n.info.Port), Handler: handler}
+	server := &http.Server{Addr: fmt.Sprintf(":%d", n.info.Port), Handler: handler}
 
-		go func() {
-			<-ctx.Done()
-			_ = server.Close()
-		}()
+	go func() {
+		<-ctx.Done()
+		_ = server.Close()
+	}()
 
-		err := server.ListenAndServe()
-		// This shouldn't be an error!
-		if err != http.ErrServerClosed {
-			return err
-		}
-
-		return nil
-	} else {
-		certmagic.DefaultACME.Email = sslEmail
-
-		return certmagic.HTTPS([]string{n.info.IP}, handler)
+	err := server.ListenAndServe()
+	// This shouldn't be an error!
+	if err != http.ErrServerClosed {
+		return err
 	}
+
+	return nil
 }
 
 func (n *Node) mine(ctx context.Context) error {
@@ -338,7 +335,7 @@ func (n *Node) addBlock(block database.Block) error {
 }
 
 // validateTxBeforeAddingToMempool ensures the TX is authentic, with correct nonce, and the sender has sufficient
-// funds so we waste PoW resources on TX we can tell in advance are wrong.
+// funds, so we waste PoW resources on TX we can tell in advance are wrong.
 func (n *Node) validateTxBeforeAddingToMempool(tx database.SignedTx) error {
 	return database.ApplyTx(tx, n.pendingState)
 }
@@ -349,7 +346,7 @@ func (n *Node) getPendingTXsAsArray() []database.SignedTx {
 	i := 0
 	for _, tx := range n.pendingTXs {
 		txs[i] = tx
-		i++
+		i += 1
 	}
 
 	return txs

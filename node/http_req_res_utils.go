@@ -3,37 +3,49 @@ package node
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 )
 
-func writeErrRes(w http.ResponseWriter, err error) {
-	jsonErrRes, _ := json.Marshal(ErrRes{err.Error()})
+func writeErrorResponse(w http.ResponseWriter, err error) {
+	errorJson, _ := json.Marshal(ErrorResponse{err.Error()})
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusInternalServerError)
-	w.Write(jsonErrRes)
+	_, err = w.Write(errorJson)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
 }
 
-func writeRes(w http.ResponseWriter, content interface{}) {
+func writeResponse(w http.ResponseWriter, content interface{}) {
 	contentJson, err := json.Marshal(content)
 	if err != nil {
-		writeErrRes(w, err)
+		writeErrorResponse(w, err)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(contentJson)
+	_, err = w.Write(contentJson)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
 }
 
-func readReq(r *http.Request, reqBody interface{}) error {
-	reqBodyJson, err := ioutil.ReadAll(r.Body)
+func readRequest(r *http.Request, requestBody interface{}) error {
+	requestBodyJson, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		return fmt.Errorf("unable to read request body. %s", err.Error())
 	}
-	defer r.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+	}(r.Body)
 
-	err = json.Unmarshal(reqBodyJson, reqBody)
+	err = json.Unmarshal(requestBodyJson, requestBody)
 	if err != nil {
 		return fmt.Errorf("unable to unmarshal request body. %s", err.Error())
 	}
@@ -41,18 +53,23 @@ func readReq(r *http.Request, reqBody interface{}) error {
 	return nil
 }
 
-func readRes(r *http.Response, reqBody interface{}) error {
-	resBodyJson, err := ioutil.ReadAll(r.Body)
+func readResponse(r *http.Response, responseBody interface{}) error {
+	responseBodyJson, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		return fmt.Errorf("unable to read response body. %s", err.Error())
 	}
-	defer r.Body.Close()
+	defer func(body io.ReadCloser) {
+		err := body.Close()
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+	}(r.Body)
 
 	if r.StatusCode != http.StatusOK {
-		return fmt.Errorf("unable to process response. %s", string(resBodyJson))
+		return fmt.Errorf("unable to process response. %s", string(responseBodyJson))
 	}
 
-	err = json.Unmarshal(resBodyJson, reqBody)
+	err = json.Unmarshal(responseBodyJson, responseBody)
 	if err != nil {
 		return fmt.Errorf("unable to unmarshal response body. %s", err.Error())
 	}
