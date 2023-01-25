@@ -7,11 +7,6 @@ import (
 	"strings"
 )
 
-// Expands a file path
-// 1. replace tilde with users home dir
-// 2. expands embedded environment variables
-// 3. cleans the path, e.g. /a/b/../c -> /a/c
-// Note, it has limitations, e.g. ~someuser/tmp will not be expanded
 func ExpandPath(p string) string {
 	if i := strings.Index(p, ":"); i > 0 {
 		return p
@@ -25,10 +20,6 @@ func ExpandPath(p string) string {
 		}
 	}
 	return path.Clean(os.ExpandEnv(p))
-}
-
-func RemoveDir(path string) error {
-	return os.RemoveAll(path)
 }
 
 func homeDir() string {
