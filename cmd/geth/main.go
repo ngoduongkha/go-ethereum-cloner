@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/ngoduongkha/go-ethereum-cloner/node"
 	"os"
 
 	"github.com/ngoduongkha/go-ethereum-cloner/fs"
@@ -12,8 +13,6 @@ const (
 	flagKeystoreFile  = "keystore"
 	flagDataDir       = "datadir"
 	flagMiner         = "miner"
-	flagSSLEmail      = "ssl-email"
-	flagDisableSSL    = "disable-ssl"
 	flagIP            = "ip"
 	flagPort          = "port"
 	flagBootstrapAcc  = "bootstrap-account"
@@ -32,19 +31,38 @@ func main() {
 
 	err := gethCmd.Execute()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
 func addDefaultRequiredFlags(cmd *cobra.Command) {
 	cmd.Flags().String(flagDataDir, "", "Absolute path to your node's data dir where the DB will be/is stored")
-	cmd.MarkFlagRequired(flagDataDir)
+	_ = cmd.MarkFlagRequired(flagDataDir)
 }
 
 func addKeystoreFlag(cmd *cobra.Command) {
 	cmd.Flags().String(flagKeystoreFile, "", "Absolute path to the encrypted keystore file")
-	cmd.MarkFlagRequired(flagKeystoreFile)
+	_ = cmd.MarkFlagRequired(flagKeystoreFile)
+}
+
+func addMinerFlag(cmd *cobra.Command) {
+	cmd.Flags().String(flagMiner, "", "your node's miner account to receive the block rewards")
+	_ = cmd.MarkFlagRequired(flagMiner)
+}
+
+func addNodeHttpInfoFlags(cmd *cobra.Command) {
+	cmd.Flags().String(flagIP, node.DefaultIP, "your node's public IP to communication with other peers")
+	cmd.Flags().Uint64(flagPort, 0, "your node's public HTTP port for communication with other peers (configurable if SSL is disabled)")
+	_ = cmd.MarkFlagRequired(flagPort)
+}
+
+func addBootstrapInfoFlags(cmd *cobra.Command) {
+	cmd.Flags().String(flagBootstrapIp, node.DefaultIP, "default bootstrap server to interconnect peers")
+	cmd.Flags().Uint64(flagBootstrapPort, 0, "default bootstrap server port to interconnect peers")
+	_ = cmd.MarkFlagRequired(flagBootstrapPort)
+	cmd.Flags().String(flagBootstrapAcc, "", "default bootstrap Genesis account with 1M ETH")
+	_ = cmd.MarkFlagRequired(flagBootstrapAcc)
 }
 
 func getDataDirFromCmd(cmd *cobra.Command) string {
