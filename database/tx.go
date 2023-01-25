@@ -15,14 +15,12 @@ func NewAccount(value string) common.Address {
 }
 
 type Tx struct {
-	From     common.Address `json:"from"`
-	To       common.Address `json:"to"`
-	Gas      uint           `json:"gas"`
-	GasPrice uint           `json:"gasPrice"`
-	Value    uint           `json:"value"`
-	Nonce    uint           `json:"nonce"`
-	Data     string         `json:"data"`
-	Time     uint64         `json:"time"`
+	From  common.Address `json:"from"`
+	To    common.Address `json:"to"`
+	Value uint           `json:"value"`
+	Nonce uint           `json:"nonce"`
+	Data  string         `json:"data"`
+	Time  uint64         `json:"time"`
 }
 
 type SignedTx struct {
@@ -30,12 +28,8 @@ type SignedTx struct {
 	Sig []byte `json:"signature"`
 }
 
-func NewTx(from, to common.Address, gas uint, gasPrice uint, value, nonce uint, data string) Tx {
-	return Tx{from, to, gas, gasPrice, value, nonce, data, uint64(time.Now().Unix())}
-}
-
-func NewBaseTx(from, to common.Address, value, nonce uint, data string) Tx {
-	return NewTx(from, to, TxGas, TxGasPriceDefault, value, nonce, data)
+func NewTx(from, to common.Address, value, nonce uint, data string) Tx {
+	return Tx{from, to, value, nonce, data, uint64(time.Now().Unix())}
 }
 
 func NewSignedTx(tx Tx, sig []byte) SignedTx {
@@ -46,16 +40,8 @@ func (t Tx) IsReward() bool {
 	return t.Data == "reward"
 }
 
-func (t Tx) Cost(isTip1Fork bool) uint {
-	if isTip1Fork {
-		return t.Value + t.GasCost()
-	}
-
+func (t Tx) Cost() uint {
 	return t.Value + TxFee
-}
-
-func (t Tx) GasCost() uint {
-	return t.Gas * t.GasPrice
 }
 
 func (t Tx) Hash() (Hash, error) {
@@ -71,98 +57,43 @@ func (t Tx) Encode() ([]byte, error) {
 	return json.Marshal(t)
 }
 
-// MarshalJSON is the main source of truth for encoding a TX for hash calculation from expected attributes.
-//
-// The logic is bit ugly and hacky but prevents infinite marshaling loops of embedded objects and allows
-// the structure to change with new TIPs.
 func (t Tx) MarshalJSON() ([]byte, error) {
-	// Prior TIP1
-	if t.Gas == 0 {
-		type legacyTx struct {
-			From  common.Address `json:"from"`
-			To    common.Address `json:"to"`
-			Value uint           `json:"value"`
-			Nonce uint           `json:"nonce"`
-			Data  string         `json:"data"`
-			Time  uint64         `json:"time"`
-		}
-		return json.Marshal(legacyTx{
-			From:  t.From,
-			To:    t.To,
-			Value: t.Value,
-			Nonce: t.Nonce,
-			Data:  t.Data,
-			Time:  t.Time,
-		})
+	type legacyTx struct {
+		From  common.Address `json:"from"`
+		To    common.Address `json:"to"`
+		Value uint           `json:"value"`
+		Nonce uint           `json:"nonce"`
+		Data  string         `json:"data"`
+		Time  uint64         `json:"time"`
 	}
-
-	type tip1Tx struct {
-		From     common.Address `json:"from"`
-		To       common.Address `json:"to"`
-		Gas      uint           `json:"gas"`
-		GasPrice uint           `json:"gasPrice"`
-		Value    uint           `json:"value"`
-		Nonce    uint           `json:"nonce"`
-		Data     string         `json:"data"`
-		Time     uint64         `json:"time"`
-	}
-
-	return json.Marshal(tip1Tx{
-		From:     t.From,
-		To:       t.To,
-		Gas:      t.Gas,
-		GasPrice: t.GasPrice,
-		Value:    t.Value,
-		Nonce:    t.Nonce,
-		Data:     t.Data,
-		Time:     t.Time,
+	return json.Marshal(legacyTx{
+		From:  t.From,
+		To:    t.To,
+		Value: t.Value,
+		Nonce: t.Nonce,
+		Data:  t.Data,
+		Time:  t.Time,
 	})
 }
 
 func (t SignedTx) MarshalJSON() ([]byte, error) {
-	if t.Gas == 0 {
-		type legacyTx struct {
-			From  common.Address `json:"from"`
-			To    common.Address `json:"to"`
-			Value uint           `json:"value"`
-			Nonce uint           `json:"nonce"`
-			Data  string         `json:"data"`
-			Time  uint64         `json:"time"`
-			Sig   []byte         `json:"signature"`
-		}
-		return json.Marshal(legacyTx{
-			From:  t.From,
-			To:    t.To,
-			Value: t.Value,
-			Nonce: t.Nonce,
-			Data:  t.Data,
-			Time:  t.Time,
-			Sig:   t.Sig,
-		})
+	type legacyTx struct {
+		From  common.Address `json:"from"`
+		To    common.Address `json:"to"`
+		Value uint           `json:"value"`
+		Nonce uint           `json:"nonce"`
+		Data  string         `json:"data"`
+		Time  uint64         `json:"time"`
+		Sig   []byte         `json:"signature"`
 	}
-
-	type tip1Tx struct {
-		From     common.Address `json:"from"`
-		To       common.Address `json:"to"`
-		Gas      uint           `json:"gas"`
-		GasPrice uint           `json:"gasPrice"`
-		Value    uint           `json:"value"`
-		Nonce    uint           `json:"nonce"`
-		Data     string         `json:"data"`
-		Time     uint64         `json:"time"`
-		Sig      []byte         `json:"signature"`
-	}
-
-	return json.Marshal(tip1Tx{
-		From:     t.From,
-		To:       t.To,
-		Gas:      t.Gas,
-		GasPrice: t.GasPrice,
-		Value:    t.Value,
-		Nonce:    t.Nonce,
-		Data:     t.Data,
-		Time:     t.Time,
-		Sig:      t.Sig,
+	return json.Marshal(legacyTx{
+		From:  t.From,
+		To:    t.To,
+		Value: t.Value,
+		Nonce: t.Nonce,
+		Data:  t.Data,
+		Time:  t.Time,
+		Sig:   t.Sig,
 	})
 }
 
