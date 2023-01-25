@@ -18,8 +18,6 @@ func walletCmd() *cobra.Command {
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			return incorrectUsageErr()
 		},
-		Run: func(cmd *cobra.Command, args []string) {
-		},
 	}
 
 	walletCmd.AddCommand(walletNewAccountCmd())

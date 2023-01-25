@@ -11,11 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-const (
-	TxGas             = 21
-	TxGasPriceDefault = 1
-	TxFee             = uint(50)
-)
+const TxFee = uint(50)
 
 type State struct {
 	Balances      map[common.Address]uint
@@ -28,8 +24,6 @@ type State struct {
 	hasGenesisBlock bool
 
 	miningDifficulty uint
-
-	forkTIP1 uint64
 
 	HashCache   map[string]int64
 	HeightCache map[uint64]int64
@@ -61,9 +55,8 @@ func NewStateFromDisk(dataDir string, miningDifficulty uint) (*State, error) {
 
 	scanner := bufio.NewScanner(f)
 
-	state := &State{balances, account2nonce, f, Block{}, Hash{}, false, miningDifficulty, gen.ForkTIP1, map[string]int64{}, map[uint64]int64{}}
+	state := &State{balances, account2nonce, f, Block{}, Hash{}, false, miningDifficulty, map[string]int64{}, map[uint64]int64{}}
 
-	// set file position
 	filePos := int64(0)
 
 	for scanner.Scan() {
@@ -182,10 +175,6 @@ func (s *State) ChangeMiningDifficulty(newDifficulty uint) {
 	s.miningDifficulty = newDifficulty
 }
 
-func (s *State) IsTIP1Fork() bool {
-	return s.NextBlockNumber() >= s.forkTIP1
-}
-
 func (s *State) Copy() State {
 	c := State{}
 	c.hasGenesisBlock = s.hasGenesisBlock
@@ -194,7 +183,6 @@ func (s *State) Copy() State {
 	c.Balances = make(map[common.Address]uint)
 	c.Account2Nonce = make(map[common.Address]uint)
 	c.miningDifficulty = s.miningDifficulty
-	c.forkTIP1 = s.forkTIP1
 
 	for acc, balance := range s.Balances {
 		c.Balances[acc] = balance
@@ -240,11 +228,7 @@ func applyBlock(b Block, s *State) error {
 	}
 
 	s.Balances[b.Header.Miner] += BlockReward
-	if s.IsTIP1Fork() {
-		s.Balances[b.Header.Miner] += b.GasReward()
-	} else {
-		s.Balances[b.Header.Miner] += uint(len(b.TXs)) * TxFee
-	}
+	s.Balances[b.Header.Miner] += uint(len(b.TXs)) * TxFee
 
 	return nil
 }
@@ -270,7 +254,7 @@ func ApplyTx(tx SignedTx, s *State) error {
 		return err
 	}
 
-	s.Balances[tx.From] -= tx.Cost(s.IsTIP1Fork())
+	s.Balances[tx.From] -= tx.Cost()
 	s.Balances[tx.To] += tx.Value
 
 	s.Account2Nonce[tx.From] = tx.Nonce
@@ -291,29 +275,6 @@ func ValidateTx(tx SignedTx, s *State) error {
 	expectedNonce := s.GetNextAccountNonce(tx.From)
 	if tx.Nonce != expectedNonce {
 		return fmt.Errorf("wrong TX. Sender '%s' next nonce must be '%d', not '%d'", tx.From.String(), expectedNonce, tx.Nonce)
-	}
-
-	if s.IsTIP1Fork() {
-		// For now we only have one type, transfer TXs, so all TXs must pay 21 gas like on Ethereum (21 000)
-		if tx.Gas != TxGas {
-			return fmt.Errorf("insufficient TX gas %v. required: %v", tx.Gas, TxGas)
-		}
-
-		if tx.GasPrice < TxGasPriceDefault {
-			return fmt.Errorf("insufficient TX gasPrice %v. required at least: %v", tx.GasPrice, TxGasPriceDefault)
-		}
-
-	} else {
-		// Prior to TIP1, a signed TX must NOT populate the Gas fields to prevent consensus from crashing
-		// It's not enough to add this validation to http_routes.go because a TX could come from another node
-		// that could modify its software and broadcast such a TX, it must be validated here too.
-		if tx.Gas != 0 || tx.GasPrice != 0 {
-			return fmt.Errorf("invalid TX. `Gas` and `GasPrice` can't be populated before TIP1 fork is active")
-		}
-	}
-
-	if tx.Cost(s.IsTIP1Fork()) > s.Balances[tx.From] {
-		return fmt.Errorf("wrong TX. Sender '%s' balance is %d ETH. Tx cost is %d ETH", tx.From.String(), s.Balances[tx.From], tx.Cost(s.IsTIP1Fork()))
 	}
 
 	return nil
