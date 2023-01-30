@@ -57,6 +57,7 @@ func NewStateFromDisk(dataDir string, miningDifficulty uint) (*State, error) {
 
 	state := &State{balances, account2nonce, f, Block{}, Hash{}, false, miningDifficulty, map[string]int64{}, map[uint64]int64{}}
 
+	// set file position
 	filePos := int64(0)
 
 	for scanner.Scan() {
@@ -199,9 +200,6 @@ func (s *State) Close() error {
 	return s.dbFile.Close()
 }
 
-// applyBlock verifies if block can be added to the blockchain.
-//
-// Block metadata are verified as well as transactions within (sufficient balances, etc).
 func applyBlock(b Block, s *State) error {
 	nextExpectedBlockNumber := s.latestBlock.Header.Number + 1
 
@@ -278,4 +276,28 @@ func ValidateTx(tx SignedTx, s *State) error {
 	}
 
 	return nil
+}
+
+// Get blocks and its hash
+func (s *State) GetBlocks() ([]Block, error) {
+	var blocks []Block
+
+	_, err := s.dbFile.Seek(0, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	scanner := bufio.NewScanner(s.dbFile)
+
+	for scanner.Scan() {
+		var blockFs BlockFS
+		err := json.Unmarshal(scanner.Bytes(), &blockFs)
+		if err != nil {
+			return nil, err
+		}
+
+		blocks = append(blocks, blockFs.Value)
+	}
+
+	return blocks, nil
 }

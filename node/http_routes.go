@@ -41,6 +41,12 @@ type StatusResponse struct {
 	Account    common.Address      `json:"account"`
 }
 
+type NodeInfo struct {
+	Nodes      []PeerNode          `json:"nodes"`
+	Blocks     []database.Block    `json:"blocks"`
+	PendingTXs []database.SignedTx `json:"pending_txs"`
+}
+
 type SyncResponse struct {
 	Blocks []database.Block `json:"blocks"`
 }
@@ -92,6 +98,24 @@ func addTxHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 	}
 
 	writeResponse(w, AddTxResponse{Success: true})
+}
+
+func nodeInfoHandler(w http.ResponseWriter, node *Node) {
+	enableCors(&w)
+
+	blocks, err := node.state.GetBlocks()
+	if err != nil {
+		writeErrorResponse(w, err)
+		return
+	}
+
+	res := NodeInfo{
+		Nodes:      node.KnownPeers(),
+		PendingTXs: node.getPendingTXsAsArray(),
+		Blocks:     blocks,
+	}
+
+	writeResponse(w, res)
 }
 
 func statusHandler(w http.ResponseWriter, node *Node) {

@@ -12,7 +12,7 @@ var genesisJson = `{
 	"chain_id": "Ethereum",
 	"symbol": "ETH",
 	"balances": {
-	  "0xA4848e9A6f18bAF8aE79bfE709Cd7e7b1a612939": 1000000
+	  "0x0eBa9c7AD60e5c0e45a709F93AF2A7a4BbFcd9c1": 1000000
 	}
   }`
 

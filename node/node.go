@@ -11,7 +11,11 @@ import (
 	"github.com/ngoduongkha/go-ethereum-cloner/database"
 )
 
-const DefaultIP = "127.0.0.1"
+const (
+	DefaultIP        = "127.0.0.1"
+	BootstrapPort    = 3000
+	BootstrapAccount = "0xe153037747eadbDAA34a3D8c07dBd1F86dc7a17C"
+)
 
 const endpointStatus = "/node/status"
 
@@ -33,8 +37,9 @@ const (
 )
 
 const (
-	miningIntervalSeconds   = 10
-	DefaultMiningDifficulty = 3
+	miningIntervalSeconds   = 1
+	syncIntervalSeconds     = 4
+	DefaultMiningDifficulty = 2
 )
 
 type PeerNode struct {
@@ -143,51 +148,54 @@ func (n *Node) LatestBlockHash() database.Hash {
 	return n.state.LatestBlockHash()
 }
 
+// Serve both HTTP and socketIO
 func (n *Node) serveHttp(ctx context.Context) error {
-	handler := http.NewServeMux()
+	mux := http.NewServeMux()
 
-	handler.HandleFunc("/balances/list", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/balances/list", func(w http.ResponseWriter, r *http.Request) {
 		listBalancesHandler(w, n.state)
 	})
 
-	handler.HandleFunc("/tx/add", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/tx/add", func(w http.ResponseWriter, r *http.Request) {
 		addTxHandler(w, r, n)
 	})
 
-	handler.HandleFunc(endpointStatus, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/node/info", func(w http.ResponseWriter, r *http.Request) {
+		nodeInfoHandler(w, n)
+	})
+
+	mux.HandleFunc(endpointStatus, func(w http.ResponseWriter, r *http.Request) {
 		statusHandler(w, n)
 	})
 
-	handler.HandleFunc(endpointSync, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(endpointSync, func(w http.ResponseWriter, r *http.Request) {
 		syncHandler(w, r, n)
 	})
 
-	handler.HandleFunc(endpointAddPeer, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(endpointAddPeer, func(w http.ResponseWriter, r *http.Request) {
 		addPeerHandler(w, r, n)
 	})
 
-	handler.HandleFunc(endpointBlockByNumberOrHash, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(endpointBlockByNumberOrHash, func(w http.ResponseWriter, r *http.Request) {
 		blockByNumberOrHash(w, r, n)
 	})
 
-	handler.HandleFunc(endpointMempoolViewer, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(endpointMempoolViewer, func(w http.ResponseWriter, r *http.Request) {
 		mempoolViewer(w, n.pendingTXs)
 	})
 
-	server := &http.Server{Addr: fmt.Sprintf(":%d", n.info.Port), Handler: handler}
+	server := &http.Server{Addr: fmt.Sprintf(":%d", n.info.Port), Handler: mux}
 
 	go func() {
 		<-ctx.Done()
-		_ = server.Close()
+		_ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := server.Shutdown(_ctx); err != nil {
+			fmt.Println("Error shutting down server:", err)
+		}
 	}()
 
-	err := server.ListenAndServe()
-	// This shouldn't be an error!
-	if err != http.ErrServerClosed {
-		return err
-	}
-
-	return nil
+	return server.ListenAndServe()
 }
 
 func (n *Node) mine(ctx context.Context) error {
@@ -302,15 +310,15 @@ func (n *Node) AddPendingTX(tx database.SignedTx, fromPeer PeerNode) error {
 		return err
 	}
 
-	err = n.validateTxBeforeAddingToMempool(tx)
-	if err != nil {
-		return err
-	}
-
 	_, isAlreadyPending := n.pendingTXs[txHash.Hex()]
 	_, isArchived := n.archivedTXs[txHash.Hex()]
 
 	if !isAlreadyPending && !isArchived {
+		err = n.validateTxBeforeAddingToMempool(tx)
+		if err != nil {
+			return err
+		}
+
 		fmt.Printf("Added Pending TX %s from Peer %s\n", txJson, fromPeer.TcpAddress())
 		n.pendingTXs[txHash.Hex()] = tx
 		n.newPendingTXs <- tx
@@ -319,8 +327,6 @@ func (n *Node) AddPendingTX(tx database.SignedTx, fromPeer PeerNode) error {
 	return nil
 }
 
-// addBlock is a wrapper around the n.state.AddBlock() to have a single function for changing the main state
-// from the Node perspective, so we can also reset the pending state in the same time.
 func (n *Node) addBlock(block database.Block) error {
 	_, err := n.state.AddBlock(block)
 	if err != nil {
@@ -350,4 +356,17 @@ func (n *Node) getPendingTXsAsArray() []database.SignedTx {
 	}
 
 	return txs
+}
+
+// Get known peers as an array
+func (n *Node) KnownPeers() []PeerNode {
+	peers := make([]PeerNode, len(n.knownPeers))
+
+	i := 0
+	for _, peer := range n.knownPeers {
+		peers[i] = peer
+		i += 1
+	}
+
+	return peers
 }

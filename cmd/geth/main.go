@@ -59,10 +59,8 @@ func addNodeHttpInfoFlags(cmd *cobra.Command) {
 
 func addBootstrapInfoFlags(cmd *cobra.Command) {
 	cmd.Flags().String(flagBootstrapIp, node.DefaultIP, "default bootstrap server to interconnect peers")
-	cmd.Flags().Uint64(flagBootstrapPort, 0, "default bootstrap server port to interconnect peers")
-	_ = cmd.MarkFlagRequired(flagBootstrapPort)
-	cmd.Flags().String(flagBootstrapAcc, "", "default bootstrap Genesis account with 1M ETH")
-	_ = cmd.MarkFlagRequired(flagBootstrapAcc)
+	cmd.Flags().Uint64(flagBootstrapPort, node.BootstrapPort, "default bootstrap server port to interconnect peers")
+	cmd.Flags().String(flagBootstrapAcc, node.BootstrapAccount, "default bootstrap Genesis account with 1M ETH")
 }
 
 func getDataDirFromCmd(cmd *cobra.Command) string {
