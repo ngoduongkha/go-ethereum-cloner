@@ -118,6 +118,18 @@ func nodeInfoHandler(w http.ResponseWriter, node *Node) {
 	writeResponse(w, res)
 }
 
+func listBlockHashesHandler(w http.ResponseWriter, state *database.State) {
+	enableCors(&w)
+
+	hashes, err := state.GetBlocks()
+	if err != nil {
+		writeErrorResponse(w, err)
+		return
+	}
+
+	writeResponse(w, hashes)
+}
+
 func statusHandler(w http.ResponseWriter, node *Node) {
 	enableCors(&w)
 

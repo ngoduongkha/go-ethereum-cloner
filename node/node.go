@@ -37,9 +37,10 @@ const (
 )
 
 const (
-	miningIntervalSeconds   = 1
-	syncIntervalSeconds     = 4
-	DefaultMiningDifficulty = 2
+	miningIntervalSeconds           = 1
+	syncIntervalSeconds             = 4
+	checkForkedStateIntervalSeconds = 10
+	DefaultMiningDifficulty         = 2
 )
 
 type PeerNode struct {
@@ -162,6 +163,11 @@ func (n *Node) serveHttp(ctx context.Context) error {
 
 	mux.HandleFunc("/node/info", func(w http.ResponseWriter, r *http.Request) {
 		nodeInfoHandler(w, n)
+	})
+
+	// Get the list of block hashes
+	mux.HandleFunc("/blocks/list", func(w http.ResponseWriter, r *http.Request) {
+		listBlockHashesHandler(w, n.state)
 	})
 
 	mux.HandleFunc(endpointStatus, func(w http.ResponseWriter, r *http.Request) {

@@ -278,7 +278,6 @@ func ValidateTx(tx SignedTx, s *State) error {
 	return nil
 }
 
-// Get blocks and its hash
 func (s *State) GetBlocks() ([]Block, error) {
 	var blocks []Block
 
