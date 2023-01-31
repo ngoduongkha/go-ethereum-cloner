@@ -106,6 +106,84 @@ func (s *State) AddBlocks(blocks []Block) error {
 	return nil
 }
 
+func (s *State) GetForkedBlock(peerBlocks []Block) (Block, error) {
+	blocks, err := s.GetBlocks()
+	if err != nil {
+		return Block{}, err
+	}
+
+	for i, b := range blocks {
+		fmt.Println(i)
+		if !reflect.DeepEqual(b, peerBlocks[i]) {
+			return b, nil
+		}
+	}
+
+	return Block{}, fmt.Errorf("no fork found")
+}
+
+func (s *State) RemoveBlocks(fromBlock Block) error {
+	blocks, err := s.GetBlocks()
+	if err != nil {
+		return err
+	}
+
+	for _, b := range blocks {
+		if b.Header.Number < fromBlock.Header.Number {
+			break
+		}
+
+		err := s.RemoveBlock(b)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *State) RemoveBlock(b Block) error {
+	blockHash, err := b.Hash()
+	if err != nil {
+		return err
+	}
+
+	blockFs := BlockFS{blockHash, b}
+
+	blockFsJson, err := json.Marshal(blockFs)
+	if err != nil {
+		return err
+	}
+
+	// get file pos for cache
+	fs, _ := s.dbFile.Stat()
+	filePos := fs.Size() - int64(len(blockFsJson)) - 1
+
+	// set search caches
+	delete(s.HashCache, blockFs.Key.Hex())
+	delete(s.HeightCache, blockFs.Value.Header.Number)
+
+	// truncate file
+	err = s.dbFile.Truncate(filePos)
+	if err != nil {
+		return err
+	}
+
+	// reset latest block
+	blocks, err := s.GetBlocks()
+	if err != nil {
+		return err
+	}
+
+	s.latestBlock = blocks[len(blocks)-1]
+	s.latestBlockHash, err = s.latestBlock.Hash()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (s *State) AddBlock(b Block) (Hash, error) {
 	pendingState := s.Copy()
 

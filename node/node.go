@@ -12,12 +12,16 @@ import (
 )
 
 const (
-	DefaultIP        = "127.0.0.1"
+	DefaultIP        = "192.168.1.44"
 	BootstrapPort    = 3000
 	BootstrapAccount = "0xe153037747eadbDAA34a3D8c07dBd1F86dc7a17C"
 )
 
 const endpointStatus = "/node/status"
+
+const endpointNodeInfo = "/node/info"
+
+const endpointListBlocks = "/node/blocks"
 
 const (
 	endpointSync                  = "/node/sync"
@@ -141,6 +145,12 @@ func (n *Node) Run(ctx context.Context) error {
 			fmt.Println("Error mining:", err)
 		}
 	}()
+	go func() {
+		err := n.checkForkedState(ctx)
+		if err != nil {
+			fmt.Println("Error checking forked state:", err)
+		}
+	}()
 
 	return n.serveHttp(ctx)
 }
@@ -161,13 +171,12 @@ func (n *Node) serveHttp(ctx context.Context) error {
 		addTxHandler(w, r, n)
 	})
 
-	mux.HandleFunc("/node/info", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(endpointNodeInfo, func(w http.ResponseWriter, r *http.Request) {
 		nodeInfoHandler(w, n)
 	})
 
-	// Get the list of block hashes
-	mux.HandleFunc("/blocks/list", func(w http.ResponseWriter, r *http.Request) {
-		listBlockHashesHandler(w, n.state)
+	mux.HandleFunc(endpointListBlocks, func(w http.ResponseWriter, r *http.Request) {
+		listBlocksHandler(w, n.state)
 	})
 
 	mux.HandleFunc(endpointStatus, func(w http.ResponseWriter, r *http.Request) {
