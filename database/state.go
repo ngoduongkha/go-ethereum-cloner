@@ -112,53 +112,46 @@ func (s *State) GetForkedBlock(peerBlocks []Block) (Block, error) {
 		return Block{}, err
 	}
 
+	prev := Block{}
 	for i, b := range blocks {
 		fmt.Println(i)
 		if !reflect.DeepEqual(b, peerBlocks[i]) {
-			return b, nil
+			return prev, nil
 		}
+		prev = b
 	}
 
 	return Block{}, fmt.Errorf("no fork found")
 }
 
 func (s *State) RemoveBlocks(fromBlock Block) error {
-	blockHash, err := fromBlock.Hash()
-	if err != nil {
-		return err
-	}
+	for !reflect.DeepEqual(s.latestBlock, fromBlock) {
+		filePos, ok := s.HashCache[s.latestBlockHash.Hex()]
+		if !ok {
+			return fmt.Errorf("block not found")
+		}
 
-	// find block in db
-	filePos, ok := s.HashCache[blockHash.Hex()]
-	if !ok {
-		return fmt.Errorf("block not found in db")
-	}
+		for _, tx := range s.latestBlock.TXs {
+			s.Balances[tx.From] += tx.Value
+			s.Balances[tx.To] -= tx.Value
+			s.Account2Nonce[tx.From]--
+		}
 
-	// remove from filePos to end of file
-	err = s.dbFile.Truncate(filePos)
-	if err != nil {
-		return err
-	}
+		parent, err := GetBlockByHeightOrHashByFileName(s, 0, s.latestBlock.Header.Parent.Hex(), s.dbFile.Name())
+		if err != nil {
+			return err
+		}
 
-	// get blocks from db
-	blocks, err := s.GetBlocks()
-	if err != nil {
-		return err
-	}
+		s.latestBlock = parent.Value
+		s.latestBlockHash = parent.Key
+		delete(s.HashCache, s.latestBlockHash.Hex())
+		delete(s.HeightCache, s.latestBlock.Header.Number)
 
-	// reset state
-	s.Balances = make(map[common.Address]uint)
-	s.Account2Nonce = make(map[common.Address]uint)
-	s.latestBlock = Block{}
-	s.latestBlockHash = Hash{}
-	s.hasGenesisBlock = false
-	s.HashCache = map[string]int64{}
-	s.HeightCache = map[uint64]int64{}
-
-	// re-add blocks
-	err = s.AddBlocks(blocks)
-	if err != nil {
-		return err
+		// truncate dbfile
+		err = s.dbFile.Truncate(filePos)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

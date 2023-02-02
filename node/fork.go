@@ -49,12 +49,10 @@ func (n *Node) doCheckForkedState() {
 			continue
 		}
 
-		fmt.Println(111111)
 		if status.Hash == n.state.LatestBlockHash() {
 			continue
 		}
 
-		fmt.Println(22222)
 		if status.Number <= n.state.LatestBlock().Header.Number {
 			continue
 		}
@@ -66,8 +64,6 @@ func (n *Node) doCheckForkedState() {
 			continue
 		}
 
-		fmt.Println(44444)
-
 		// Step 3: find forked blocks
 		forkedBlock, err := n.state.GetForkedBlock(peerBlocks)
 		if err != nil {
@@ -76,7 +72,6 @@ func (n *Node) doCheckForkedState() {
 		}
 
 		err = n.state.RemoveBlocks(forkedBlock)
-
 		if err != nil {
 			fmt.Printf("ERROR: %s\n", err)
 			continue

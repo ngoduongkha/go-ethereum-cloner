@@ -145,12 +145,12 @@ func (n *Node) Run(ctx context.Context) error {
 			fmt.Println("Error mining:", err)
 		}
 	}()
-	// go func() {
-	// 	err := n.checkForkedState(ctx)
-	// 	if err != nil {
-	// 		fmt.Println("Error checking forked state:", err)
-	// 	}
-	// }()
+	go func() {
+		err := n.checkForkedState(ctx)
+		if err != nil {
+			fmt.Println("Error checking forked state:", err)
+		}
+	}()
 
 	return n.serveHttp(ctx)
 }
