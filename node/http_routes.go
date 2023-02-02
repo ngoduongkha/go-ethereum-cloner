@@ -110,7 +110,7 @@ func nodeInfoHandler(w http.ResponseWriter, node *Node) {
 	}
 
 	peers := node.KnownPeers()
-	if node.info.IsBootstrap {
+	if node.info.IP != DefaultIP || node.info.Port != BootstrapPort {
 		peers = append(peers, node.info)
 	}
 
