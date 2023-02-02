@@ -149,6 +149,10 @@ func (n *Node) serveHttp(ctx context.Context) error {
 	handler.HandleFunc("/balances/list", func(w http.ResponseWriter, r *http.Request) {
 		listBalancesHandler(w, n.state)
 	})
+    
+	handler.HandleFunc("/wallet/create", func(w http.ResponseWriter, r *http.Request) {
+		createWallet(w, r, n)
+	})
 
 	handler.HandleFunc("/tx/add", func(w http.ResponseWriter, r *http.Request) {
 		addTxHandler(w, r, n)
