@@ -1,8 +1,0 @@
-{
-	"genesis_time": "2020-06-01T00:00:00.000000000Z",
-	"chain_id": "Ethereum",
-	"symbol": "ETH",
-	"balances": {
-	  "0x0eBa9c7AD60e5c0e45a709F93AF2A7a4BbFcd9c1": 1000000
-	}
-  }
