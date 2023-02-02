@@ -123,60 +123,40 @@ func (s *State) GetForkedBlock(peerBlocks []Block) (Block, error) {
 }
 
 func (s *State) RemoveBlocks(fromBlock Block) error {
-	blocks, err := s.GetBlocks()
+	blockHash, err := fromBlock.Hash()
 	if err != nil {
 		return err
 	}
 
-	for _, b := range blocks {
-		if b.Header.Number < fromBlock.Header.Number {
-			break
-		}
-
-		err := s.RemoveBlock(b)
-		if err != nil {
-			return err
-		}
+	// find block in db
+	filePos, ok := s.HashCache[blockHash.Hex()]
+	if !ok {
+		return fmt.Errorf("block not found in db")
 	}
 
-	return nil
-}
-
-func (s *State) RemoveBlock(b Block) error {
-	blockHash, err := b.Hash()
-	if err != nil {
-		return err
-	}
-
-	blockFs := BlockFS{blockHash, b}
-
-	blockFsJson, err := json.Marshal(blockFs)
-	if err != nil {
-		return err
-	}
-
-	// get file pos for cache
-	fs, _ := s.dbFile.Stat()
-	filePos := fs.Size() - int64(len(blockFsJson)) - 1
-
-	// set search caches
-	delete(s.HashCache, blockFs.Key.Hex())
-	delete(s.HeightCache, blockFs.Value.Header.Number)
-
-	// truncate file
+	// remove from filePos to end of file
 	err = s.dbFile.Truncate(filePos)
 	if err != nil {
 		return err
 	}
 
-	// reset latest block
+	// get blocks from db
 	blocks, err := s.GetBlocks()
 	if err != nil {
 		return err
 	}
 
-	s.latestBlock = blocks[len(blocks)-1]
-	s.latestBlockHash, err = s.latestBlock.Hash()
+	// reset state
+	s.Balances = make(map[common.Address]uint)
+	s.Account2Nonce = make(map[common.Address]uint)
+	s.latestBlock = Block{}
+	s.latestBlockHash = Hash{}
+	s.hasGenesisBlock = false
+	s.HashCache = map[string]int64{}
+	s.HeightCache = map[uint64]int64{}
+
+	// re-add blocks
+	err = s.AddBlocks(blocks)
 	if err != nil {
 		return err
 	}

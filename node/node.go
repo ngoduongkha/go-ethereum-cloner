@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	DefaultIP        = "192.168.1.44"
+	DefaultIP        = "127.0.0.1"
 	BootstrapPort    = 3000
 	BootstrapAccount = "0xe153037747eadbDAA34a3D8c07dBd1F86dc7a17C"
 )
@@ -145,12 +145,12 @@ func (n *Node) Run(ctx context.Context) error {
 			fmt.Println("Error mining:", err)
 		}
 	}()
-	go func() {
-		err := n.checkForkedState(ctx)
-		if err != nil {
-			fmt.Println("Error checking forked state:", err)
-		}
-	}()
+	// go func() {
+	// 	err := n.checkForkedState(ctx)
+	// 	if err != nil {
+	// 		fmt.Println("Error checking forked state:", err)
+	// 	}
+	// }()
 
 	return n.serveHttp(ctx)
 }

@@ -109,8 +109,11 @@ func nodeInfoHandler(w http.ResponseWriter, node *Node) {
 		return
 	}
 
+	peers := node.KnownPeers()
+	peers = append(peers, node.info)
+
 	res := NodeInfo{
-		Nodes:      node.KnownPeers(),
+		Nodes:      peers,
 		PendingTXs: node.getPendingTXsAsArray(),
 		Blocks:     blocks,
 	}

@@ -55,14 +55,11 @@ func (n *Node) doCheckForkedState() {
 		}
 
 		fmt.Println(22222)
-		if status.Number < n.state.LatestBlock().Header.Number {
+		if status.Number <= n.state.LatestBlock().Header.Number {
 			continue
 		}
 
-		// Found the diff block hash
-
 		// Step 2: query list blocks from peer
-		fmt.Println(33333)
 		peerBlocks, err := n.getBlocksFromPeer(peer)
 		if err != nil {
 			fmt.Printf("ERROR: %s\n", err)
@@ -108,14 +105,3 @@ func (n *Node) getBlocksFromPeer(peer PeerNode) ([]database.Block, error) {
 
 	return blocks, nil
 }
-
-// func (n *Node) checkAndRemoveIfForked(peerBLocks []database.Block) error {
-// 	for _, peerBlock := range peerBLocks {
-// 		err := database.CheckAndRemoveIfForked(block.Hash, n.dataDir)
-// 		if err != nil {
-// 			return err
-// 		}
-// 	}
-
-// 	return nil
-// }
