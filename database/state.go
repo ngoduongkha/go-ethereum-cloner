@@ -24,7 +24,7 @@ type State struct {
 	hasGenesisBlock bool
 
 	miningDifficulty uint
-
+    // position of block in file db
 	HashCache   map[string]int64
 	HeightCache map[uint64]int64
 }
@@ -251,7 +251,9 @@ func ApplyTx(tx SignedTx, s *State) error {
 	if err != nil {
 		return err
 	}
-
+    if(s.Balances[tx.From] < (tx.Cost()+tx.Value)) { 
+		return fmt.Errorf("Not enough balance")
+	}
 	s.Balances[tx.From] -= tx.Cost()
 	s.Balances[tx.To] += tx.Value
 
