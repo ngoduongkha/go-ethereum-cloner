@@ -156,7 +156,7 @@ func (n *Node) serveHttp(ctx context.Context) error {
 		listBalancesHandler(w, n.state)
 	})
     
-	handler.HandleFunc("/wallet/create", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/wallet/create", func(w http.ResponseWriter, r *http.Request) {
 		createWallet(w, r, n)
 	})
 
