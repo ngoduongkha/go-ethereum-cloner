@@ -34,7 +34,7 @@ type AddWalletRequest struct {
 }
 
 type AddWalletResponse struct {
-	Account common.Address `json:"account"`
+	Account string `json:"account"`
 }
 
 type AddTxResponse struct {
@@ -125,7 +125,7 @@ func addWalletHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 		return
 	}
 
-	writeResponse(w, AddWalletResponse{Account: acc})
+	writeResponse(w, AddWalletResponse{Account: acc.Hex()})
 }
 
 func nodeInfoHandler(w http.ResponseWriter, node *Node) {
