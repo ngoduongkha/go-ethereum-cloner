@@ -110,7 +110,9 @@ func nodeInfoHandler(w http.ResponseWriter, node *Node) {
 	}
 
 	peers := node.KnownPeers()
-	peers = append(peers, node.info)
+	if node.info.IsBootstrap {
+		peers = append(peers, node.info)
+	}
 
 	res := NodeInfo{
 		Nodes:      peers,
