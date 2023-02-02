@@ -172,6 +172,10 @@ func (n *Node) serveHttp(ctx context.Context) error {
 		addTxHandler(w, r, n)
 	})
 
+	mux.HandleFunc("/account", func(w http.ResponseWriter, r *http.Request) {
+		addWalletHandler(w, r, n)
+	})
+
 	mux.HandleFunc(endpointNodeInfo, func(w http.ResponseWriter, r *http.Request) {
 		nodeInfoHandler(w, n)
 	})

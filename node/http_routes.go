@@ -29,6 +29,14 @@ type AddTxRequest struct {
 	Data    string `json:"data"`
 }
 
+type AddWalletRequest struct {
+	Password string `json:"password"`
+}
+
+type AddWalletResponse struct {
+	Account common.Address `json:"account"`
+}
+
 type AddTxResponse struct {
 	Success bool `json:"success"`
 }
@@ -96,6 +104,28 @@ func addTxHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 	}
 
 	writeResponse(w, AddTxResponse{Success: true})
+}
+
+func addWalletHandler(w http.ResponseWriter, r *http.Request, node *Node) {
+	req := AddWalletRequest{}
+	err := readRequest(r, &req)
+	if err != nil {
+		writeErrorResponse(w, err)
+		return
+	}
+
+	if req.Password == "" {
+		writeErrorResponse(w, errors.New("password is required"))
+		return
+	}
+
+	acc, err := wallet.NewKeystoreAccount(node.dataDir, req.Password)
+	if err != nil {
+		writeErrorResponse(w, err)
+		return
+	}
+
+	writeResponse(w, AddWalletResponse{Account: acc})
 }
 
 func nodeInfoHandler(w http.ResponseWriter, node *Node) {
