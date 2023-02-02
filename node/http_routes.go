@@ -57,8 +57,6 @@ type AddPeerResponse struct {
 }
 
 func listBalancesHandler(w http.ResponseWriter, state *database.State) {
-	enableCors(&w)
-
 	writeResponse(w, BalancesResponse{state.LatestBlockHash(), state.Balances})
 }
 
@@ -101,8 +99,6 @@ func addTxHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 }
 
 func nodeInfoHandler(w http.ResponseWriter, node *Node) {
-	enableCors(&w)
-
 	blocks, err := node.state.GetBlocks()
 	if err != nil {
 		writeErrorResponse(w, err)
@@ -124,8 +120,6 @@ func nodeInfoHandler(w http.ResponseWriter, node *Node) {
 }
 
 func listBlocksHandler(w http.ResponseWriter, state *database.State) {
-	enableCors(&w)
-
 	blocks, err := state.GetBlocks()
 	if err != nil {
 		writeErrorResponse(w, err)
@@ -136,8 +130,6 @@ func listBlocksHandler(w http.ResponseWriter, state *database.State) {
 }
 
 func statusHandler(w http.ResponseWriter, node *Node) {
-	enableCors(&w)
-
 	res := StatusResponse{
 		Hash:       node.state.LatestBlockHash(),
 		Number:     node.state.LatestBlock().Header.Number,
@@ -189,8 +181,6 @@ func addPeerHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 }
 
 func blockByNumberOrHash(w http.ResponseWriter, r *http.Request, node *Node) {
-	enableCors(&w)
-
 	errorParamsRequired := errors.New("height or hash param is required")
 
 	params := strings.Split(r.URL.Path, "/")[1:]
@@ -220,7 +210,5 @@ func blockByNumberOrHash(w http.ResponseWriter, r *http.Request, node *Node) {
 }
 
 func mempoolViewer(w http.ResponseWriter, txs map[string]database.SignedTx) {
-	enableCors(&w)
-
 	writeResponse(w, txs)
 }

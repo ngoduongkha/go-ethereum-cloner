@@ -200,7 +200,7 @@ func (n *Node) serveHttp(ctx context.Context) error {
 		mempoolViewer(w, n.pendingTXs)
 	})
 
-	handler := cors.Default().Handler(mux)
+	handler := cors.AllowAll().Handler(mux)
 	server := &http.Server{Addr: fmt.Sprintf(":%d", n.info.Port), Handler: handler}
 
 	go func() {
