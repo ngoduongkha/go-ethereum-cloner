@@ -68,7 +68,7 @@ func NewStateFromDisk(dataDir string, miningDifficulty uint) (*State, error) {
 		blockFsJson := scanner.Bytes()
 
 		if len(blockFsJson) == 0 {
-			break
+			break	
 		}
 
 		var blockFs BlockFS
@@ -95,16 +95,16 @@ func NewStateFromDisk(dataDir string, miningDifficulty uint) (*State, error) {
 	return state, nil
 }
 
-func (s *State) AddBlocks(blocks []Block) error {
-	for _, b := range blocks {
-		_, err := s.AddBlock(b)
-		if err != nil {
-			return err
-		}
-	}
+// func (s *State) AddBlocks(blocks []Block) error {
+// 	for _, b := range blocks {
+// 		_, err := s.AddBlock(b)
+// 		if err != nil {
+// 			return err
+// 		}
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 func (s *State) AddBlock(b Block) (Hash, error) {
 	pendingState := s.Copy()

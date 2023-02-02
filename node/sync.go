@@ -142,7 +142,7 @@ func (n *Node) syncPendingTXs(peer PeerNode, txs []database.SignedTx) error {
 
 	return nil
 }
-
+ 
 func (n *Node) joinKnownPeers(peer PeerNode) error {
 	if peer.connected {
 		return nil

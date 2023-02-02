@@ -32,6 +32,13 @@ type AddTxRequest struct {
 type AddTxResponse struct {
 	Success bool `json:"success"`
 }
+type CreateWalletRequest struct {
+	Password string `json:"password"`
+}
+
+type CreateWalletResponse struct {
+	Address string `json:"address"`
+}
 
 type StatusResponse struct {
 	Hash       database.Hash       `json:"block_hash"`
@@ -60,6 +67,26 @@ func listBalancesHandler(w http.ResponseWriter, state *database.State) {
 	enableCors(&w)
 
 	writeResponse(w, BalancesResponse{state.LatestBlockHash(), state.Balances})
+}
+func createWallet(w http.ResponseWriter, r *http.Request,  node *Node) {
+    req := CreateWalletRequest{}
+	err := readRequest(r, &req)
+	if err != nil {
+		writeErrorResponse(w, err)
+		return
+	}
+
+	if req.Password == "" {
+		writeErrorResponse(w, errors.New("password is required"))
+		return
+	}
+    acc, err := wallet.NewKeystoreAccount(node.dataDir, req.Password)
+    if err != nil {
+		fmt.Println(err)
+		return
+	}
+	writeResponse(w, CreateWalletResponse{ Address: acc.Hex() } )
+
 }
 
 func addTxHandler(w http.ResponseWriter, r *http.Request, node *Node) {
