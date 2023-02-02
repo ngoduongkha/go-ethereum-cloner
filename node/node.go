@@ -9,6 +9,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ngoduongkha/go-ethereum-cloner/database"
+	"github.com/rs/cors"
 )
 
 const (
@@ -199,7 +200,8 @@ func (n *Node) serveHttp(ctx context.Context) error {
 		mempoolViewer(w, n.pendingTXs)
 	})
 
-	server := &http.Server{Addr: fmt.Sprintf(":%d", n.info.Port), Handler: mux}
+	handler := cors.Default().Handler(mux)
+	server := &http.Server{Addr: fmt.Sprintf(":%d", n.info.Port), Handler: handler}
 
 	go func() {
 		<-ctx.Done()
