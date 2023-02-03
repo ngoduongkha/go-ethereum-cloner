@@ -49,11 +49,11 @@ func (n *Node) doCheckForkedState() {
 			continue
 		}
 
-		if status.Hash == n.state.LatestBlockHash() {
+		if status.Hash.Hex() == n.state.LatestBlockHash().Hex() {
 			continue
 		}
 
-		if status.Number <= n.state.LatestBlock().Header.Number {
+		if status.Number < n.state.LatestBlock().Header.Number {
 			continue
 		}
 

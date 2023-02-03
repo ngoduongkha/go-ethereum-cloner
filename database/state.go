@@ -114,7 +114,6 @@ func (s *State) GetForkedBlock(peerBlocks []Block) (Block, error) {
 
 	prev := Block{}
 	for i, b := range blocks {
-		fmt.Println(i)
 		if !reflect.DeepEqual(b, peerBlocks[i]) {
 			return prev, nil
 		}
@@ -132,10 +131,13 @@ func (s *State) RemoveBlocks(fromBlock Block) error {
 		}
 
 		for _, tx := range s.latestBlock.TXs {
-			s.Balances[tx.From] += tx.Value
+			s.Balances[tx.From] += tx.Cost()
 			s.Balances[tx.To] -= tx.Value
 			s.Account2Nonce[tx.From]--
 		}
+
+		s.Balances[s.latestBlock.Header.Miner] -= BlockReward
+		s.Balances[s.latestBlock.Header.Miner] -= uint(len(s.latestBlock.TXs)) * TxFee
 
 		parent, err := GetBlockByHeightOrHashByFileName(s, 0, s.latestBlock.Header.Parent.Hex(), s.dbFile.Name())
 		if err != nil {
