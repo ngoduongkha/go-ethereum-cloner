@@ -9,6 +9,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ngoduongkha/go-ethereum-cloner/database"
+	"github.com/rs/cors"
 )
 
 const (
@@ -18,6 +19,10 @@ const (
 )
 
 const endpointStatus = "/node/status"
+
+const endpointNodeInfo = "/node/info"
+
+const endpointListBlocks = "/node/blocks"
 
 const (
 	endpointSync                  = "/node/sync"
@@ -37,9 +42,10 @@ const (
 )
 
 const (
-	miningIntervalSeconds   = 1
-	syncIntervalSeconds     = 4
-	DefaultMiningDifficulty = 2
+	miningIntervalSeconds           = 1
+	syncIntervalSeconds             = 4
+	checkForkedStateIntervalSeconds = 10
+	DefaultMiningDifficulty         = 2
 )
 
 type PeerNode struct {
@@ -140,6 +146,12 @@ func (n *Node) Run(ctx context.Context) error {
 			fmt.Println("Error mining:", err)
 		}
 	}()
+	go func() {
+		err := n.checkForkedState(ctx)
+		if err != nil {
+			fmt.Println("Error checking forked state:", err)
+		}
+	}()
 
 	return n.serveHttp(ctx)
 }
@@ -164,8 +176,16 @@ func (n *Node) serveHttp(ctx context.Context) error {
 		addTxHandler(w, r, n)
 	})
 
-	mux.HandleFunc("/node/info", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/account", func(w http.ResponseWriter, r *http.Request) {
+		addWalletHandler(w, r, n)
+	})
+
+	mux.HandleFunc(endpointNodeInfo, func(w http.ResponseWriter, r *http.Request) {
 		nodeInfoHandler(w, n)
+	})
+
+	mux.HandleFunc(endpointListBlocks, func(w http.ResponseWriter, r *http.Request) {
+		listBlocksHandler(w, n.state)
 	})
 
 	mux.HandleFunc(endpointStatus, func(w http.ResponseWriter, r *http.Request) {
@@ -188,7 +208,8 @@ func (n *Node) serveHttp(ctx context.Context) error {
 		mempoolViewer(w, n.pendingTXs)
 	})
 
-	server := &http.Server{Addr: fmt.Sprintf(":%d", n.info.Port), Handler: mux}
+	handler := cors.AllowAll().Handler(mux)
+	server := &http.Server{Addr: fmt.Sprintf(":%d", n.info.Port), Handler: handler}
 
 	go func() {
 		<-ctx.Done()

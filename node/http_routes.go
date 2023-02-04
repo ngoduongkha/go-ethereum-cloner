@@ -29,6 +29,14 @@ type AddTxRequest struct {
 	Data    string `json:"data"`
 }
 
+type AddWalletRequest struct {
+	Password string `json:"password"`
+}
+
+type AddWalletResponse struct {
+	Account string `json:"account"`
+}
+
 type AddTxResponse struct {
 	Success bool `json:"success"`
 }
@@ -64,8 +72,6 @@ type AddPeerResponse struct {
 }
 
 func listBalancesHandler(w http.ResponseWriter, state *database.State) {
-	enableCors(&w)
-
 	writeResponse(w, BalancesResponse{state.LatestBlockHash(), state.Balances})
 }
 func createWallet(w http.ResponseWriter, r *http.Request,  node *Node) {
@@ -127,17 +133,42 @@ func addTxHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 	writeResponse(w, AddTxResponse{Success: true})
 }
 
-func nodeInfoHandler(w http.ResponseWriter, node *Node) {
-	enableCors(&w)
+func addWalletHandler(w http.ResponseWriter, r *http.Request, node *Node) {
+	req := AddWalletRequest{}
+	err := readRequest(r, &req)
+	if err != nil {
+		writeErrorResponse(w, err)
+		return
+	}
 
+	if req.Password == "" {
+		writeErrorResponse(w, errors.New("password is required"))
+		return
+	}
+
+	acc, err := wallet.NewKeystoreAccount(node.dataDir, req.Password)
+	if err != nil {
+		writeErrorResponse(w, err)
+		return
+	}
+
+	writeResponse(w, AddWalletResponse{Account: acc.Hex()})
+}
+
+func nodeInfoHandler(w http.ResponseWriter, node *Node) {
 	blocks, err := node.state.GetBlocks()
 	if err != nil {
 		writeErrorResponse(w, err)
 		return
 	}
 
+	peers := node.KnownPeers()
+	if node.info.IP != DefaultIP || node.info.Port != BootstrapPort {
+		peers = append(peers, node.info)
+	}
+
 	res := NodeInfo{
-		Nodes:      node.KnownPeers(),
+		Nodes:      peers,
 		PendingTXs: node.getPendingTXsAsArray(),
 		Blocks:     blocks,
 	}
@@ -145,9 +176,17 @@ func nodeInfoHandler(w http.ResponseWriter, node *Node) {
 	writeResponse(w, res)
 }
 
-func statusHandler(w http.ResponseWriter, node *Node) {
-	enableCors(&w)
+func listBlocksHandler(w http.ResponseWriter, state *database.State) {
+	blocks, err := state.GetBlocks()
+	if err != nil {
+		writeErrorResponse(w, err)
+		return
+	}
 
+	writeResponse(w, blocks)
+}
+
+func statusHandler(w http.ResponseWriter, node *Node) {
 	res := StatusResponse{
 		Hash:       node.state.LatestBlockHash(),
 		Number:     node.state.LatestBlock().Header.Number,
@@ -199,8 +238,6 @@ func addPeerHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 }
 
 func blockByNumberOrHash(w http.ResponseWriter, r *http.Request, node *Node) {
-	enableCors(&w)
-
 	errorParamsRequired := errors.New("height or hash param is required")
 
 	params := strings.Split(r.URL.Path, "/")[1:]
@@ -230,7 +267,5 @@ func blockByNumberOrHash(w http.ResponseWriter, r *http.Request, node *Node) {
 }
 
 func mempoolViewer(w http.ResponseWriter, txs map[string]database.SignedTx) {
-	enableCors(&w)
-
 	writeResponse(w, txs)
 }

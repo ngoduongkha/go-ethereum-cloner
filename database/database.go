@@ -91,3 +91,47 @@ func GetBlockByHeightOrHash(state *State, height uint64, hash, dataDir string) (
 
 	return block, nil
 }
+
+func GetBlockByHeightOrHashByFileName(state *State, height uint64, hash, filename string) (BlockFS, error) {
+	var block BlockFS
+
+	key, ok := state.HeightCache[height]
+	if hash != "" {
+		key, ok = state.HashCache[hash]
+	}
+
+	if !ok {
+		if hash != "" {
+			return block, fmt.Errorf("invalid hash: '%v'", hash)
+		}
+		return block, fmt.Errorf("invalid height: '%v'", height)
+	}
+
+	f, err := os.OpenFile(filename, os.O_RDONLY, 0o600)
+	if err != nil {
+		return block, err
+	}
+	defer func(f *os.File) {
+		err := f.Close()
+		if err != nil {
+			panic(err)
+		}
+	}(f)
+
+	_, err = f.Seek(key, 0)
+	if err != nil {
+		return block, err
+	}
+	scanner := bufio.NewScanner(f)
+	if scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return block, err
+		}
+		err = json.Unmarshal(scanner.Bytes(), &block)
+		if err != nil {
+			return block, err
+		}
+	}
+
+	return block, nil
+}

@@ -106,6 +106,59 @@ func NewStateFromDisk(dataDir string, miningDifficulty uint) (*State, error) {
 // 	return nil
 // }
 
+func (s *State) GetForkedBlock(peerBlocks []Block) (Block, error) {
+	blocks, err := s.GetBlocks()
+	if err != nil {
+		return Block{}, err
+	}
+
+	prev := Block{}
+	for i, b := range blocks {
+		if !reflect.DeepEqual(b, peerBlocks[i]) {
+			return prev, nil
+		}
+		prev = b
+	}
+
+	return Block{}, fmt.Errorf("no fork found")
+}
+
+func (s *State) RemoveBlocks(fromBlock Block) error {
+	for !reflect.DeepEqual(s.latestBlock, fromBlock) {
+		filePos, ok := s.HashCache[s.latestBlockHash.Hex()]
+		if !ok {
+			return fmt.Errorf("block not found")
+		}
+
+		for _, tx := range s.latestBlock.TXs {
+			s.Balances[tx.From] += tx.Cost()
+			s.Balances[tx.To] -= tx.Value
+			s.Account2Nonce[tx.From]--
+		}
+
+		s.Balances[s.latestBlock.Header.Miner] -= BlockReward
+		s.Balances[s.latestBlock.Header.Miner] -= uint(len(s.latestBlock.TXs)) * TxFee
+
+		parent, err := GetBlockByHeightOrHashByFileName(s, 0, s.latestBlock.Header.Parent.Hex(), s.dbFile.Name())
+		if err != nil {
+			return err
+		}
+
+		s.latestBlock = parent.Value
+		s.latestBlockHash = parent.Key
+		delete(s.HashCache, s.latestBlockHash.Hex())
+		delete(s.HeightCache, s.latestBlock.Header.Number)
+
+		// truncate dbfile
+		err = s.dbFile.Truncate(filePos)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (s *State) AddBlock(b Block) (Hash, error) {
 	pendingState := s.Copy()
 
@@ -280,7 +333,6 @@ func ValidateTx(tx SignedTx, s *State) error {
 	return nil
 }
 
-// Get blocks and its hash
 func (s *State) GetBlocks() ([]Block, error) {
 	var blocks []Block
 

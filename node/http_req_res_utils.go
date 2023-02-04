@@ -76,7 +76,3 @@ func readResponse(r *http.Response, responseBody interface{}) error {
 
 	return nil
 }
-
-func enableCors(w *http.ResponseWriter) {
-	(*w).Header().Set("Access-Control-Allow-Origin", "*")
-}
