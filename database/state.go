@@ -95,17 +95,6 @@ func NewStateFromDisk(dataDir string, miningDifficulty uint) (*State, error) {
 	return state, nil
 }
 
-// func (s *State) AddBlocks(blocks []Block) error {
-// 	for _, b := range blocks {
-// 		_, err := s.AddBlock(b)
-// 		if err != nil {
-// 			return err
-// 		}
-// 	}
-
-// 	return nil
-// }
-
 func (s *State) GetForkedBlock(peerBlocks []Block) (Block, error) {
 	blocks, err := s.GetBlocks()
 	if err != nil {

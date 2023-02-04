@@ -11,11 +11,11 @@ import (
 )
 
 type PendingBlock struct {
-	parent database.Hash
-	number uint64
-	time   uint64
-	miner  common.Address
-	txs    []database.SignedTx
+	Parent database.Hash       `json:"parent"`
+	Number uint64              `json:"number"`
+	Time   uint64              `json:"time"`
+	Miner  common.Address      `json:"miner"`
+	TXs    []database.SignedTx `json:"txs"`
 }
 
 func NewPendingBlock(parent database.Hash, number uint64, miner common.Address, txs []database.SignedTx) PendingBlock {
@@ -23,7 +23,7 @@ func NewPendingBlock(parent database.Hash, number uint64, miner common.Address, 
 }
 
 func Mine(ctx context.Context, pb PendingBlock, miningDifficulty uint) (database.Block, error) {
-	if len(pb.txs) == 0 {
+	if len(pb.TXs) == 0 {
 		return database.Block{}, fmt.Errorf("mining empty blocks is not allowed")
 	}
 
@@ -46,10 +46,10 @@ func Mine(ctx context.Context, pb PendingBlock, miningDifficulty uint) (database
 		nonce = generateNonce()
 
 		if attempt%1000000 == 0 || attempt == 1 {
-			fmt.Printf("Mining %d Pending TXs. Attempt: %d\n", len(pb.txs), attempt)
+			fmt.Printf("Mining %d Pending TXs. Attempt: %d\n", len(pb.TXs), attempt)
 		}
 
-		block = database.NewBlock(pb.parent, pb.number, nonce, pb.time, pb.miner, pb.txs)
+		block = database.NewBlock(pb.Parent, pb.Number, nonce, pb.Time, pb.Miner, pb.TXs)
 		blockHash, err := block.Hash()
 		if err != nil {
 			return database.Block{}, fmt.Errorf("couldn't mine block. %s", err.Error())

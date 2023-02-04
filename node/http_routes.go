@@ -57,9 +57,10 @@ type StatusResponse struct {
 }
 
 type NodeInfo struct {
-	Nodes      []PeerNode          `json:"nodes"`
-	Blocks     []database.Block    `json:"blocks"`
-	PendingTXs []database.SignedTx `json:"pending_txs"`
+	Nodes        []PeerNode          `json:"nodes"`
+	Blocks       []database.Block    `json:"blocks"`
+	PendingTXs   []database.SignedTx `json:"pending_txs"`
+	PendingBlock PendingBlock        `json:"pending_block"`
 }
 
 type SyncResponse struct {
@@ -74,8 +75,9 @@ type AddPeerResponse struct {
 func listBalancesHandler(w http.ResponseWriter, state *database.State) {
 	writeResponse(w, BalancesResponse{state.LatestBlockHash(), state.Balances})
 }
-func createWallet(w http.ResponseWriter, r *http.Request,  node *Node) {
-    req := CreateWalletRequest{}
+
+func createWallet(w http.ResponseWriter, r *http.Request, node *Node) {
+	req := CreateWalletRequest{}
 	err := readRequest(r, &req)
 	if err != nil {
 		writeErrorResponse(w, err)
@@ -86,13 +88,12 @@ func createWallet(w http.ResponseWriter, r *http.Request,  node *Node) {
 		writeErrorResponse(w, errors.New("password is required"))
 		return
 	}
-    acc, err := wallet.NewKeystoreAccount(node.dataDir, req.Password)
-    if err != nil {
+	acc, err := wallet.NewKeystoreAccount(node.dataDir, req.Password)
+	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	writeResponse(w, CreateWalletResponse{ Address: acc.Hex() } )
-
+	writeResponse(w, CreateWalletResponse{Address: acc.Hex()})
 }
 
 func addTxHandler(w http.ResponseWriter, r *http.Request, node *Node) {
@@ -168,9 +169,10 @@ func nodeInfoHandler(w http.ResponseWriter, node *Node) {
 	}
 
 	res := NodeInfo{
-		Nodes:      peers,
-		PendingTXs: node.getPendingTXsAsArray(),
-		Blocks:     blocks,
+		Nodes:        peers,
+		PendingTXs:   node.getPendingTXsAsArray(),
+		Blocks:       blocks,
+		PendingBlock: node.pendingBlock,
 	}
 
 	writeResponse(w, res)

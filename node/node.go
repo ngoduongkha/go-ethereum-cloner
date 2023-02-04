@@ -81,6 +81,7 @@ type Node struct {
 	archivedTXs     map[string]database.SignedTx
 	newSyncedBlocks chan database.Block
 	newPendingTXs   chan database.SignedTx
+	pendingBlock    PendingBlock
 
 	// Number of zeroes the hash must start with to be considered valid. Default 3
 	miningDifficulty uint
@@ -167,7 +168,7 @@ func (n *Node) serveHttp(ctx context.Context) error {
 	mux.HandleFunc("/balances/list", func(w http.ResponseWriter, r *http.Request) {
 		listBalancesHandler(w, n.state)
 	})
-    
+
 	mux.HandleFunc("/wallet/create", func(w http.ResponseWriter, r *http.Request) {
 		createWallet(w, r, n)
 	})
@@ -252,6 +253,7 @@ func (n *Node) mine(ctx context.Context) error {
 				fmt.Printf("\nPeer mined next Block '%s' faster :(\n", blockHash.Hex())
 
 				n.removeMinedPendingTXs(block)
+				n.pendingBlock = PendingBlock{}
 				stopCurrentMining()
 			}
 
@@ -270,12 +272,15 @@ func (n *Node) minePendingTXs(ctx context.Context) error {
 		n.getPendingTXsAsArray(),
 	)
 
+	n.pendingBlock = blockToMine
+
 	minedBlock, err := Mine(ctx, blockToMine, n.miningDifficulty)
 	if err != nil {
 		return err
 	}
 
 	n.removeMinedPendingTXs(minedBlock)
+	n.pendingBlock = PendingBlock{}
 
 	err = n.addBlock(minedBlock)
 	if err != nil {
