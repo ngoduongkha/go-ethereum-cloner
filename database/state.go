@@ -24,7 +24,7 @@ type State struct {
 	hasGenesisBlock bool
 
 	miningDifficulty uint
-    // position of block in file db
+	// position of block in file db
 	HashCache   map[string]int64
 	HeightCache map[uint64]int64
 }
@@ -68,7 +68,7 @@ func NewStateFromDisk(dataDir string, miningDifficulty uint) (*State, error) {
 		blockFsJson := scanner.Bytes()
 
 		if len(blockFsJson) == 0 {
-			break	
+			break
 		}
 
 		var blockFs BlockFS
@@ -304,9 +304,15 @@ func ApplyTx(tx SignedTx, s *State) error {
 	if err != nil {
 		return err
 	}
-    if(s.Balances[tx.From] < (tx.Cost()+tx.Value)) { 
-		return fmt.Errorf("Not enough balance")
+
+	if _, ok := s.Balances[tx.From]; !ok {
+		s.Balances[tx.From] = 0
 	}
+
+	if s.Balances[tx.From] < (tx.Cost() + tx.Value) {
+		return fmt.Errorf("not enough balance")
+	}
+
 	s.Balances[tx.From] -= tx.Cost()
 	s.Balances[tx.To] += tx.Value
 
@@ -328,6 +334,10 @@ func ValidateTx(tx SignedTx, s *State) error {
 	expectedNonce := s.GetNextAccountNonce(tx.From)
 	if tx.Nonce != expectedNonce {
 		return fmt.Errorf("wrong TX. Sender '%s' next nonce must be '%d', not '%d'", tx.From.String(), expectedNonce, tx.Nonce)
+	}
+
+	if tx.Cost() > s.Balances[tx.From] {
+		return fmt.Errorf("wrong TX. Sender '%s' balance is %d TBB. Tx cost is %d TBB", tx.From.String(), s.Balances[tx.From], tx.Cost())
 	}
 
 	return nil
