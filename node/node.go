@@ -42,10 +42,10 @@ const (
 )
 
 const (
-	miningIntervalSeconds           = 1
-	syncIntervalSeconds             = 4
-	checkForkedStateIntervalSeconds = 10
-	DefaultMiningDifficulty         = 2
+	miningIntervalSeconds           = 10
+	syncIntervalSeconds             = 15
+	checkForkedStateIntervalSeconds = 30
+	DefaultMiningDifficulty         = 3
 )
 
 type PeerNode struct {

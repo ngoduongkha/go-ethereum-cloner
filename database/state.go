@@ -294,14 +294,6 @@ func ApplyTx(tx SignedTx, s *State) error {
 		return err
 	}
 
-	if _, ok := s.Balances[tx.From]; !ok {
-		s.Balances[tx.From] = 0
-	}
-
-	if s.Balances[tx.From] < (tx.Cost() + tx.Value) {
-		return fmt.Errorf("not enough balance")
-	}
-
 	s.Balances[tx.From] -= tx.Cost()
 	s.Balances[tx.To] += tx.Value
 
@@ -325,8 +317,12 @@ func ValidateTx(tx SignedTx, s *State) error {
 		return fmt.Errorf("wrong TX. Sender '%s' next nonce must be '%d', not '%d'", tx.From.String(), expectedNonce, tx.Nonce)
 	}
 
+	if _, ok := s.Balances[tx.From]; !ok {
+		s.Balances[tx.From] = 0
+	}
+
 	if tx.Cost() > s.Balances[tx.From] {
-		return fmt.Errorf("wrong TX. Sender '%s' balance is %d TBB. Tx cost is %d TBB", tx.From.String(), s.Balances[tx.From], tx.Cost())
+		return fmt.Errorf("wrong TX. Sender '%s' balance is %d ETH. Tx cost is %d ETH", tx.From.String(), s.Balances[tx.From], tx.Cost())
 	}
 
 	return nil
