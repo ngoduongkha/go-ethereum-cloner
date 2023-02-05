@@ -104,7 +104,9 @@ func (s *State) GetForkedBlock(peerBlocks []Block) (Block, error) {
 	prev := Block{}
 	for i, b := range blocks {
 		if !reflect.DeepEqual(b, peerBlocks[i]) {
-			return prev, nil
+			if b.Header.Time < peerBlocks[i].Header.Time {
+				return prev, nil
+			}
 		}
 		prev = b
 	}
