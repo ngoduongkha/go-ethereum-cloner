@@ -15,12 +15,12 @@ import (
 
 const keystoreDirName = "keystore"
 
-func GetKeystoreDirPath(dataDir string) string {
-	return filepath.Join(dataDir, keystoreDirName)
+func GetKeystoreDirPath() string {
+	return filepath.Join(keystoreDirName)
 }
 
-func NewKeystoreAccount(dataDir, password string) (common.Address, error) {
-	ks := keystore.NewKeyStore(GetKeystoreDirPath(dataDir), keystore.StandardScryptN, keystore.StandardScryptP)
+func NewKeystoreAccount(password string) (common.Address, error) {
+	ks := keystore.NewKeyStore(GetKeystoreDirPath(), keystore.StandardScryptN, keystore.StandardScryptP)
 	acc, err := ks.NewAccount(password)
 	if err != nil {
 		return common.Address{}, err

@@ -88,7 +88,7 @@ func createWallet(w http.ResponseWriter, r *http.Request, node *Node) {
 		writeErrorResponse(w, errors.New("password is required"))
 		return
 	}
-	acc, err := wallet.NewKeystoreAccount(node.dataDir, req.Password)
+	acc, err := wallet.NewKeystoreAccount(req.Password)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -119,7 +119,7 @@ func addTxHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 	nonce := node.state.GetNextAccountNonce(from)
 	tx := database.NewTx(from, database.NewAccount(req.To), req.Value, nonce, req.Data)
 
-	signedTx, err := wallet.SignTxWithKeystoreAccount(tx, from, req.FromPwd, wallet.GetKeystoreDirPath(node.dataDir))
+	signedTx, err := wallet.SignTxWithKeystoreAccount(tx, from, req.FromPwd, wallet.GetKeystoreDirPath())
 	if err != nil {
 		writeErrorResponse(w, err)
 		return
@@ -147,7 +147,7 @@ func addWalletHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 		return
 	}
 
-	acc, err := wallet.NewKeystoreAccount(node.dataDir, req.Password)
+	acc, err := wallet.NewKeystoreAccount(req.Password)
 	if err != nil {
 		writeErrorResponse(w, err)
 		return

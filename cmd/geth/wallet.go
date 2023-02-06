@@ -32,16 +32,15 @@ func walletNewAccountCmd() *cobra.Command {
 		Short: "Creates a new account with a new set of a elliptic-curve Private + Public keys.",
 		Run: func(cmd *cobra.Command, args []string) {
 			password := getPassPhrase("Please enter a password to encrypt the new wallet:", true)
-			dataDir := getDataDirFromCmd(cmd)
 
-			acc, err := wallet.NewKeystoreAccount(dataDir, password)
+			acc, err := wallet.NewKeystoreAccount(password)
 			if err != nil {
 				fmt.Println(err)
 				os.Exit(1)
 			}
 
 			fmt.Printf("New account created: %s\n", acc.Hex())
-			fmt.Printf("Saved in: %s\n", wallet.GetKeystoreDirPath(dataDir))
+			fmt.Printf("Saved in: %s\n", wallet.GetKeystoreDirPath())
 		},
 	}
 
