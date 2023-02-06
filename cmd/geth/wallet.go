@@ -44,8 +44,6 @@ func walletNewAccountCmd() *cobra.Command {
 		},
 	}
 
-	addDefaultRequiredFlags(cmd)
-
 	return cmd
 }
 
